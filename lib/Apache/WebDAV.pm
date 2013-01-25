@@ -750,8 +750,9 @@ sub PROPFIND {
 
         @files = $filesys->list($uri);
 
-        # remove . and .. from the list
-        @files = grep( $_ !~ /^\.\.?$/, @files );
+ 	#meyer: Remove entry '..' but keep '.'.
+        @files = grep( $_ !~ /^\.\.$/, @files );
+
 
         # Add a trailing slash to the directory if there isn't one already
         if ( $uri !~ /\/$/ ) {
@@ -997,6 +998,10 @@ sub LOCK {
 #TODO: possible workaround for office 2010 LOCK payload
 #$lockstat{owner} =~ s/<D:href>(.*)\\\\(.*)<\/D:href>/$1/;
 #print STDERR "BRAT--------------".$lockstat{owner}."\n";
+
+# meyer@modell-aachen.de:
+# Actually it shouldn't matter whether the client sends his username as
+# NTLM string (NETBIOS_DOMAIN\user) or principal name (user@REALM).
                 next;
             }
             if ($li->nodeType == 1) {
@@ -1341,6 +1346,16 @@ sub _parseIfHeader {
     my ($this, $request) = @_;
     my $if = $request->headers_in->get('If');
     return () unless defined $if;
+
+    # meyer@modell-aachen.de:
+    # Some clients (e.g. MS Office 2010 & 2013) omit the angle brackets
+    # when sending the lock-token. That behaviour will cause the loop
+    # below to run infinitely. As "hotfix" we just add them.
+    if ( $if =~ /opaquelocktoken/ ) {
+        if ( $if !~ m/^\s*\(<{1}(.*?)>{1}\)\s*$/ ) {
+            $if =~ s/^\s*(\(){1}(.*?)(\))\s*$/$1<$2>$3/;
+        }
+    }
 
     my @headers = ();
 
