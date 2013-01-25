@@ -4,7 +4,7 @@ package Foswiki::Contrib::WebDAVContrib;
 use strict;
 
 our $VERSION          = '$Rev: 1176 $';
-our $RELEASE          = '1.0.2-/jidQrcaozxnxTDSHEh3qA';
+our $RELEASE          = '1.0.2.1-/jidQrcaozxnxTDSHEh3qA';
 our $SHORTDESCRIPTION = 'Apache2 WebDAV module for Foswiki';
 
 1;
