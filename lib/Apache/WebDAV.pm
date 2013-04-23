@@ -995,13 +995,18 @@ sub LOCK {
             }
             if ($fn eq '{DAV:}owner') {
                 $lockstat{owner} = $brat->toString();
+
+
+
 #TODO: possible workaround for office 2010 LOCK payload
 #$lockstat{owner} =~ s/<D:href>(.*)\\\\(.*)<\/D:href>/$1/;
 #print STDERR "BRAT--------------".$lockstat{owner}."\n";
 
-# meyer@modell-aachen.de:
-# Actually it shouldn't matter whether the client sends his username as
-# NTLM string (NETBIOS_DOMAIN\user) or principal name (user@REALM).
+                # meyer:
+                # NTLM
+                $lockstat{owner} =~ s/<D:href>(.*)\\(.*)<\/D:href>/$2/;
+                # Windows Principal
+                $lockstat{owner} =~ s/<D:href>(.*)\@(.*)<\/D:href>/$1/;
                 next;
             }
             if ($li->nodeType == 1) {
