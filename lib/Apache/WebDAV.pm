@@ -7,38 +7,38 @@ package Apache::WebDAV;
 use strict;
 use warnings;
 
-our $VERSION = '$Rev: 1200 $';
-our $RELEASE = '1.0.2-/jidQrcaozxnxTDSHEh3qA';
+our $VERSION = '2.0.0';
+our $RELEASE = '%$TRACKINGCODE%';
 
-use Apache2::Const     qw(:common :http);
-use Apache2::Access      ();
-use Apache2::Directive   ();
-use Apache2::RequestIO   ();
-use Apache2::RequestUtil ();
-use APR::Table           ();
+use Apache2::Const qw(:common :http);
+use Apache2::Access                    ();
+use Apache2::Directive                 ();
+use Apache2::RequestIO                 ();
+use Apache2::RequestUtil               ();
+use APR::Table                         ();
 use File::Find::Rule::Filesys::Virtual ();
-use Encode               ();
-use URI                  ();
-use URI::Escape          ();
-use XML::LibXML 1.64     ();
-use APR::UUID            ();
-use POSIX              qw(:errno_h);
+use Encode                             ();
+use URI                                ();
+use URI::Escape                        ();
+use XML::LibXML 1.64 ();
+use APR::UUID ();
+use POSIX qw(:errno_h);
 
 our $XMLParser;
 our $filesys;
 our $outdoc;
 our $statCache;
 
-our @ISOMONTH =
-  ( 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec' );
+our @ISOMONTH = (
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+);
 
-our @WEEKDAY =
-  ( 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun' );
+our @WEEKDAY = ( 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun' );
 
 # methods defined by WebDAV. Not all of these are implemented.
 my @METHODS = qw( COPY DELETE GET HEAD MKCOL MOVE OPTIONS POST PROPFIND
-                  PUT PROPPATCH LOCK UNLOCK );
+  PUT PROPPATCH LOCK UNLOCK );
 
 # The list of default properties
 my %default_props = (
@@ -62,7 +62,7 @@ my %default_props = (
     '{DAV:}quota-available-bytes' => 1,
     '{DAV:}quota-used-bytes'      => 1,
     '{DAV:}quota-assigned-bytes'  => 1,
-   );
+);
 
 # Reusable (static) XML parser
 sub _XMLParser {
@@ -73,9 +73,13 @@ sub _XMLParser {
 # Constructor
 sub new {
     my ( $class, $trace ) = @_;
-    return bless( {
-        trace => $trace || 0,
-        mimeTypes => undef }, $class );
+    return bless(
+        {
+            trace => $trace || 0,
+            mimeTypes => undef
+        },
+        $class
+    );
 }
 
 # Modelled on CPAN:Apache::WebDAV
@@ -93,15 +97,15 @@ sub process {
     my ( $this, $request ) = @_;
     my $memHandle;
 
-    if ($this->{trace} & 8) {
+    if ( $this->{trace} & 8 ) {
         require Devel::Leak;
-        $this->_trace(8, "START MEM: ".Devel::Leak::NoteSV($memHandle));
+        $this->_trace( 8, "START MEM: " . Devel::Leak::NoteSV($memHandle) );
     }
 
     my $code = _process( $this, $request );
 
-    if ($this->{trace} & 8) {
-        $this->_trace(8, "END MEM: ".Devel::Leak::NoteSV($memHandle));
+    if ( $this->{trace} & 8 ) {
+        $this->_trace( 8, "END MEM: " . Devel::Leak::NoteSV($memHandle) );
     }
 
     return $code;
@@ -110,8 +114,8 @@ sub process {
 sub _process {
     my ( $this, $request ) = @_;
 
-    my $uri     = $request->uri();
-    my $method  = uc( $request->method() );
+    my $uri    = $request->uri();
+    my $method = uc( $request->method() );
 
     # Local for thread safety
     local $filesys   = $this->_getFilesys( $uri, $request );
@@ -120,36 +124,40 @@ sub _process {
 
     my $status = DECLINED;
 
-    if ( $this->can( $method ) ) {
+    if ( $this->can($method) ) {
 
         # Protect the request body from TWiki, which wipes it when it is
         # initialised during login (I think it's actually a CGI problem,
         # but in our tests it only manifests with TWiki)
         my $content;
         my $length = $request->headers_in->get('Content-Length');
-        if ( defined $length) {
-            if ($length > 0 ) {
-                my $read = $request->read($content, $length);
+        if ( defined $length ) {
+            if ( $length > 0 ) {
+                my $read = $request->read( $content, $length );
                 $this->_trace( 2, 'DAV:', $method,
-                               "has contents; read $read of $length" );
-            } else {
+                    "has contents; read $read of $length" );
+            }
+            else {
                 $content = '';
             }
         }
 
         # Don't auth OPTIONS or M$ Office won't be able to talk to us (it
         # doesn't send auth headers with OPTIONS)
-        if ( $method eq 'OPTIONS' || $this->_processAuth( $request ) ) {
+        if ( $method eq 'OPTIONS' || $this->_processAuth($request) ) {
+
             # Trace Litmus special headers for debug
             $this->_trace(
                 2, 'DAV:', $method, $request->uri(),
                 $request->headers_in->get('X-Litmus'),
-                $request->headers_in->get('X-Litmus-Second') );
+                $request->headers_in->get('X-Litmus-Second')
+            );
             $status = $this->$method( $request, $content );
             $this->_trace( 2, 'DAV:',
-                           '<-'.($status == 0 ? 'ok' : $status).'-', $method,
-                           $request->uri() );
-        } else {
+                '<-' . ( $status == 0 ? 'ok' : $status ) . '-',
+                $method, $request->uri() );
+        }
+        else {
             $status = HTTP_UNAUTHORIZED;
         }
     }
@@ -160,78 +168,78 @@ sub _process {
 sub PROPPATCH {
     my ( $this, $request, $content ) = @_;
 
-    my $path    = Encode::decode_utf8( $request->uri() );
+    my $path = Encode::decode_utf8( $request->uri() );
+
     # Don't need the content, unless for debug
     #my $content = $this->_getContent($request);
 
-    if ( $this->_isLockNullResource($request, $path)) {
-        $this->_trace(1, 'Lock-null');
+    if ( $this->_isLockNullResource( $request, $path ) ) {
+        $this->_trace( 1, 'Lock-null' );
         return HTTP_NOT_FOUND;
     }
 
     # Check the locks
-    my @errors = $this->_checkLocks($request, 1, undef, $path);
+    my @errors = $this->_checkLocks( $request, 1, undef, $path );
 
-    if (scalar(@errors)) {
-        return $this->_emitErrorReport($request, @errors);
+    if ( scalar(@errors) ) {
+        return $this->_emitErrorReport( $request, @errors );
     }
 
     my $indoc;
-    eval {
-        $indoc = _XMLParser->parse_string($content);
-    };
+    eval { $indoc = _XMLParser->parse_string($content); };
     if ($@) {
-        $this->_trace(1, $@);
+        $this->_trace( 1, $@ );
         return HTTP_BAD_REQUEST;
     }
-    if (!$indoc) {
-        $this->_trace(1, 'No document');
+    if ( !$indoc ) {
+        $this->_trace( 1, 'No document' );
         return HTTP_BAD_REQUEST;
     }
-    if (_hasNullNamespace($indoc)) {
-        $this->_trace(1, 'Null namespace');
+    if ( _hasNullNamespace($indoc) ) {
+        $this->_trace( 1, 'Null namespace' );
         return HTTP_BAD_REQUEST;
     }
 
     my $multistat = $this->_xml_new_reply('D:multistatus');
-    my $response = $this->_xml_add_element($multistat, 'D:response');
-    $this->_xml_add_href($response, $path, 1);
+    my $response = $this->_xml_add_element( $multistat, 'D:response' );
+    $this->_xml_add_href( $response, $path, 1 );
 
     my $pud = _firstChildNode($indoc);
-    if (_fullName($pud) ne '{DAV:}propertyupdate') {
-        $this->_trace(1, 'propertyupdate expected');       
+    if ( _fullName($pud) ne '{DAV:}propertyupdate' ) {
+        $this->_trace( 1, 'propertyupdate expected' );
         return HTTP_BAD_REQUEST;
     }
 
     my %statuses;
-    for ( my $node = $pud->firstChild; $node; $node = $node->nextSibling ) {
-        next unless ($node->nodeType == 1);
+    for ( my $node = $pud->firstChild ; $node ; $node = $node->nextSibling ) {
+        next unless ( $node->nodeType == 1 );
         my $method = _fullName($node);
         $method =~ s/^{DAV:}(set|remove)$/$1/;
         my $fn = $method . 'xattr';
 
-        for (my $prop = $node->firstChild;
-             $prop;
-             $prop = $prop->nextSibling) {
-            next unless ($prop->nodeType == 1
-                           && _fullName($prop) eq '{DAV:}prop');
+        for ( my $prop = $node->firstChild ;
+            $prop ; $prop = $prop->nextSibling )
+        {
+            next
+              unless ( $prop->nodeType == 1
+                && _fullName($prop) eq '{DAV:}prop' );
             my $pnode = _firstChildNode($prop);
             next unless $pnode;
             my $k = _fullName($pnode);
             my $v;
-            if ($pnode->firstChild) {
+            if ( $pnode->firstChild ) {
                 $v = $pnode->firstChild->nodeValue;
             }
-            $this->_trace(4, $method, $k, $method eq 'set' ? "$v":'');
+            $this->_trace( 4, $method, $k, $method eq 'set' ? "$v" : '' );
             my $status = $filesys->$fn( $path, $k, $v );
             my $ns;
             my $newprop = $outdoc->createElement('D:prop');
             $this->_xml_add_propel( $newprop, $k );
             $status = $status ? HTTP_FORBIDDEN : HTTP_OK;
-            push(@{$statuses{$status}}, $newprop);
+            push( @{ $statuses{$status} }, $newprop );
         }
     }
-    $this->_xml_add_propstat($response, %statuses);
+    $this->_xml_add_propstat( $response, %statuses );
 
     $this->_trace( 4, $outdoc );
     _emitBody( $outdoc->toString(0), $request );
@@ -244,8 +252,8 @@ sub COPY {
 
     my $path = Encode::decode_utf8( $request->uri() );
 
-    if ( $this->_isLockNullResource($request, $path)) {
-        $this->_trace(1, 'Lock-null');
+    if ( $this->_isLockNullResource( $request, $path ) ) {
+        $this->_trace( 1, 'Lock-null' );
         return HTTP_NOT_FOUND;
     }
 
@@ -253,15 +261,16 @@ sub COPY {
     my $depth       = $request->headers_in->get('Depth');
     my $overwrite   = $request->headers_in->get('Overwrite') || 'T';
 
-    $destination = Encode::decode_utf8(
-        URI::Escape::uri_unescape( URI->new($destination)->path()));
+    $destination =
+      Encode::decode_utf8(
+        URI::Escape::uri_unescape( URI->new($destination)->path() ) );
     my $destHandler = $this->_getFilesys($destination);
 
     # Check the locks
     my @errors = $this->_checkLocks( $request, 1, $destHandler, $destination );
 
-    if (scalar(@errors)) {
-        return $this->_emitErrorReport($request, @errors);
+    if ( scalar(@errors) ) {
+        return $this->_emitErrorReport( $request, @errors );
     }
 
     # Plain files just get copied
@@ -270,18 +279,18 @@ sub COPY {
         # If the destination already exists and it's a directory,
         # we can't proceeed
         if ( $destHandler->test( 'd', $destination ) ) {
-            $this->_trace(1, 'Destination exists and is a dir', $destination);
+            $this->_trace( 1, 'Destination exists and is a dir', $destination );
             return HTTP_NO_CONTENT;    # litmus/spec requires this...
         }
 
         if ( !$filesys->test( 'r', $path ) ) {
-            $this->_trace(1, 'Source not readable', $path);
+            $this->_trace( 1, 'Source not readable', $path );
             return HTTP_FORBIDDEN;
         }
 
         # HTTP_PRECONDITION_FAILED return code specified by the litmus test
         if ( $destHandler->test( 'f', $destination ) && $overwrite eq 'F' ) {
-            $this->_trace(1, 'Precondition failed', $destination);
+            $this->_trace( 1, 'Precondition failed', $destination );
             return HTTP_PRECONDITION_FAILED;    # Precondition Failed?
         }
 
@@ -296,13 +305,13 @@ sub COPY {
         # Picked the 409 code because that's what the
         # litmus test says I should put here.
         if ( !$fh ) {
-            $this->_trace(1, 'Cannot open the destination', $destination);
+            $this->_trace( 1, 'Cannot open the destination', $destination );
             return HTTP_CONFLICT;    # huh?
         }
 
         print $fh $contents;
-        if ( $destHandler->close_write($fh)) {
-            $this->_trace(1, 'Cannot close the destination', $destination);
+        if ( $destHandler->close_write($fh) ) {
+            $this->_trace( 1, 'Cannot close the destination', $destination );
             return HTTP_FORBIDDEN;
         }
 
@@ -318,16 +327,16 @@ sub COPY {
 
     # Find source files that we have to copy
     my @files =
-      map { s|/+|/|g; $_ }      # simplify // to /
-        File::Find::Rule::Filesys::Virtual->virtual($filesys)
-            ->file->maxdepth($depth)->in($path);
+      map { s|/+|/|g; $_ }    # simplify // to /
+      File::Find::Rule::Filesys::Virtual->virtual($filesys)
+      ->file->maxdepth($depth)->in($path);
 
     # Find source directories that we have to copy
     my @dirs = reverse sort
-      grep { $_ !~ m|/\.\.?$| } # exclude . and ..
-        map { s|/+|/|g; $_ }    # simplify // to /
-          File::Find::Rule::Filesys::Virtual->virtual($filesys)
-              ->directory->maxdepth($depth)->in($path);
+      grep { $_ !~ m|/\.\.?$| }    # exclude . and ..
+      map { s|/+|/|g; $_ }         # simplify // to /
+      File::Find::Rule::Filesys::Virtual->virtual($filesys)
+      ->directory->maxdepth($depth)->in($path);
 
     push @dirs, $path;
 
@@ -338,12 +347,12 @@ sub COPY {
         $dest_dir =~ s/^$path/$destination/;
 
         if ( $overwrite eq 'F' && $destHandler->test( 'e', $dest_dir ) ) {
-            $this->_trace(1, 'Destination dir already exists', $dest_dir);
+            $this->_trace( 1, 'Destination dir already exists', $dest_dir );
             return HTTP_UNAUTHORIZED;
         }
 
         if ( !$destHandler->mkdir($dest_dir) ) {
-            $this->_trace(1, 'Failed to make dir', $dest_dir);
+            $this->_trace( 1, 'Failed to make dir', $dest_dir );
             return HTTP_FORBIDDEN;
         }
 
@@ -355,27 +364,27 @@ sub COPY {
     }
 
     # Copy files
-    local $/; # ignore line terminations
+    local $/;    # ignore line terminations
     foreach my $file ( reverse sort @files ) {
         my $dest_file = $file;
 
         $dest_file =~ s/^$path/$destination/;
 
-        my $fh = $filesys->open_read($file);
+        my $fh       = $filesys->open_read($file);
         my $contents = <$fh>;
         $filesys->close_read($fh);
 
         # Don't write if the file exists and overwrite is FALSE
         if ( $destHandler->test( 'e', $dest_file ) && $overwrite eq 'F' ) {
-            $this->_trace(1, 'File exists and !overwrite', $dest_file);
+            $this->_trace( 1, 'File exists and !overwrite', $dest_file );
             return HTTP_UNAUTHORIZED;
         }
 
         # Write the new file
         $fh = $destHandler->open_write($dest_file);
         print $fh $contents;
-        if ($destHandler->close_write($fh)) {
-            $this->_trace(1, 'Cannot close_write', $dest_file);
+        if ( $destHandler->close_write($fh) ) {
+            $this->_trace( 1, 'Cannot close_write', $dest_file );
             return HTTP_FORBIDDEN;
         }
     }
@@ -390,7 +399,7 @@ sub DELETE {
     my $path = Encode::decode_utf8( $request->uri() );
 
     unless ( $filesys->test( 'e', $path ) ) {
-        $this->_trace(1, 'Cannot find', $path);
+        $this->_trace( 1, 'Cannot find', $path );
         return HTTP_NOT_FOUND;
     }
 
@@ -399,25 +408,24 @@ sub DELETE {
     # specified path recursively.
     my @files =
       grep { $_ !~ m|/\.\.?$| }    # Filter . and ..
-        map { s|/+|/|g; $_ }       # Simplify // to /
-          File::Find::Rule::Filesys::Virtual->virtual(
-              $filesys)->in($path),
-                $path;
+      map { s|/+|/|g; $_ }         # Simplify // to /
+      File::Find::Rule::Filesys::Virtual->virtual($filesys)->in($path), $path;
 
-    if ( $this->_isLockNullResource($request, @files)) {
-        $this->_trace(1, 'Lock-null');
+    if ( $this->_isLockNullResource( $request, @files ) ) {
+        $this->_trace( 1, 'Lock-null' );
         return HTTP_NOT_FOUND;
     }
 
-    my @errors = $this->_checkLocks($request, 1, undef, @files);
+    my @errors = $this->_checkLocks( $request, 1, undef, @files );
 
     my %did;
-    unless (scalar(@errors)) {
+    unless ( scalar(@errors) ) {
         %did = ();
         foreach my $file (@files) {
             next if $did{$file};
             $did{$file} = 1;
             next unless $filesys->test( 'e', $file );
+
             # make sure file exists
             if ( $filesys->test( 'f', $file ) ) {
                 push( @errors, { file => $file, status => $! } )
@@ -451,21 +459,21 @@ sub DELETE {
     return HTTP_FORBIDDEN if $this->_clientIsWebDrive($request);
 
     # Otherwise return a HTTP_MULTI_STATUS
-    return $this->_emitErrorReport($request, @errors);
+    return $this->_emitErrorReport( $request, @errors );
 }
 
 sub GET {
     my ( $this, $request ) = @_;
 
-    my $path =  Encode::decode_utf8( $request->uri() );
+    my $path = Encode::decode_utf8( $request->uri() );
 
-    if ( $this->_isLockNullResource($request, $path)) {
-        $this->_trace(1, 'Lock-null');
+    if ( $this->_isLockNullResource( $request, $path ) ) {
+        $this->_trace( 1, 'Lock-null' );
         return HTTP_NOT_FOUND;
     }
 
     if ( !$filesys->test( 'r', $path ) ) {
-        $this->_trace(1, 'Cannot read', $path);
+        $this->_trace( 1, 'Cannot read', $path );
         return HTTP_FORBIDDEN;
     }
 
@@ -478,22 +486,22 @@ sub GET {
         my $fh = $filesys->open_read($path);
         if ( !$fh ) {
             if ( $! == POSIX::ENOLCK ) {
-                $this->_trace(1, 'Cannot lock', $path);
+                $this->_trace( 1, 'Cannot lock', $path );
                 return HTTP_LOCKED;
             }
             elsif ( $! == POSIX::EACCES ) {
-                $this->_trace(1, 'Cannot access', $path);
+                $this->_trace( 1, 'Cannot access', $path );
                 return HTTP_UNAUTHORIZED;
             }
             elsif ( $! == POSIX::ENOENT ) {
-                $this->_trace(1, 'No such', $path);
+                $this->_trace( 1, 'No such', $path );
                 return HTTP_UNPROCESSABLE_ENTITY;
             }
             elsif ( $! == POSIX::ENOTEMPTY ) {
-                $this->_trace(1, 'Not empty', $path);
+                $this->_trace( 1, 'Not empty', $path );
                 return HTTP_UNPROCESSABLE_ENTITY;
             }
-            $this->_trace(1, 'Forbidden', $path);
+            $this->_trace( 1, 'Forbidden', $path );
             return HTTP_FORBIDDEN;
         }
 
@@ -502,8 +510,8 @@ sub GET {
 
         $filesys->close_read($fh);
 
-        my $type = $this->_deduceMimeType( $path );
-        $request->content_type( $type ) if defined $type;
+        my $type = $this->_deduceMimeType($path);
+        $request->content_type($type) if defined $type;
 
         _emitBody( $file, $request );
 
@@ -511,53 +519,43 @@ sub GET {
     }
 
     # If the requested path is a directory, it's unclear what we're
-    # supposed to do. Net::DAV::Server prints an HTML representation
-    # of the directory structure, so let's do that.
+    # supposed to do. Use list_details to grab some content, assumed
+    # to be HTML, from the file system and chuck it out..
     if ( $filesys->test( 'd', $path ) ) {
         $request->content_type('text/html; charset="utf-8"');
-        my $body = '<html><body><code>';
-
-        my @contents = $filesys->list($path);
-        foreach my $file (@contents) {
-            my $url = $path . '/' . $file;
-            $body .= "<a href='$url'>$file</a><br />";
-        }
-        # Helpful message for IE users
-        $body .= <<MESSAGE;
-</code><p /><small>Note: If you are using Internet Explorer, please use
-File->Open and check the Open As Web Folder box.</small>
-MESSAGE
-        $body .= '</body></html>';
+	my $body = $filesys->list_details($path);
         _emitBody( $body, $request );
         return OK;
     }
-    $this->_trace(1, 'Cannot find', $path);
+    $this->_trace( 1, 'Cannot find', $path );
     return HTTP_NOT_FOUND;
 }
 
 sub HEAD {
     my ( $this, $request ) = @_;
 
-    my $path =  Encode::decode_utf8( $request->uri() );
+    my $path = Encode::decode_utf8( $request->uri() );
 
-    if ( !$filesys->test( 'e', $path )) {
-        $this->_trace(1, 'Does not exist', $path);
+    if ( !$filesys->test( 'e', $path ) ) {
+        $this->_trace( 1, 'Does not exist', $path );
         return HTTP_NOT_FOUND;
     }
 
-    if ( $this->_isLockNullResource($request, $path)) {
-        $this->_trace(1, 'Lock-null', $path);
+    if ( $this->_isLockNullResource( $request, $path ) ) {
+        $this->_trace( 1, 'Lock-null', $path );
         return HTTP_NOT_FOUND;
     }
 
     if ( $filesys->test( 'd', $path ) ) {
+
         # Collection
         $request->content_type('text/html; charset="utf-8"');
     }
     else {
+
         # Plain file
-        $request->headers_out->set(
-            'Last-Modified', '' . $filesys->modtime($path) );
+        $request->headers_out->set( 'Last-Modified',
+            '' . $filesys->modtime($path) );
     }
 
     return OK;
@@ -568,24 +566,24 @@ sub MKCOL {
 
     my $path = Encode::decode_utf8( $request->uri() );
     if ( $filesys->test( 'e', $path ) ) {
-        $this->_trace(1, 'Already exists', $path);
+        $this->_trace( 1, 'Already exists', $path );
         return HTTP_METHOD_NOT_ALLOWED;
     }
-    if ( $content ) {
+    if ($content) {
         return HTTP_UNSUPPORTED_MEDIA_TYPE;
     }
 
     # Check the locks
-    my @errors = $this->_checkLocks($request, 1, undef, $path);
+    my @errors = $this->_checkLocks( $request, 1, undef, $path );
 
-    if (scalar(@errors)) {
-        return $this->_emitErrorReport($request, @errors);
+    if ( scalar(@errors) ) {
+        return $this->_emitErrorReport( $request, @errors );
     }
 
     $filesys->mkdir($path);
 
     if ( !$filesys->test( 'd', $path ) ) {
-        $this->_trace(1, 'Not a dir', $path);
+        $this->_trace( 1, 'Not a dir', $path );
         return HTTP_CONFLICT;    # What?
     }
 
@@ -598,14 +596,15 @@ sub MOVE {
 
     my $path = Encode::decode_utf8( $request->uri() );
 
-    if ( $this->_isLockNullResource($request, $path)) {
-        $this->_trace(1, 'Lock-null', $path);
+    if ( $this->_isLockNullResource( $request, $path ) ) {
+        $this->_trace( 1, 'Lock-null', $path );
         return HTTP_NOT_FOUND;
     }
 
     my $destination = $request->headers_in->get('Destination');
-    $destination =  Encode::decode_utf8(
-        URI::Escape::uri_unescape( URI->new($destination)->path()));
+    $destination =
+      Encode::decode_utf8(
+        URI::Escape::uri_unescape( URI->new($destination)->path() ) );
     my $destHandler = $this->_getFilesys($destination);
 
     my $overwrite = $request->headers_in->get('Overwrite') || 'T';
@@ -616,32 +615,32 @@ sub MOVE {
 
             # delete the target first
             # Specify the URI for the following deletion
-            $request->uri( Encode::encode_utf8( $destination ));
-            my $result = $this->DELETE( $request );
+            $request->uri( Encode::encode_utf8($destination) );
+            my $result = $this->DELETE($request);
+
             # Reset request URI to original value
-            $request->uri( Encode::encode_utf8( $path ));
+            $request->uri( Encode::encode_utf8($path) );
         }
         else {
-            $this->_trace(1, 'Target exists', $destination);
+            $this->_trace( 1, 'Target exists', $destination );
             return HTTP_PRECONDITION_FAILED;
         }
     }
 
     # Check the locks
-    my @errors = $this->_checkLocks(
-        $request, 1, $destHandler, $path, $destination);
+    my @errors =
+      $this->_checkLocks( $request, 1, $destHandler, $path, $destination );
 
-    if (scalar(@errors)) {
-        return $this->_emitErrorReport($request, @errors);
+    if ( scalar(@errors) ) {
+        return $this->_emitErrorReport( $request, @errors );
     }
 
-    if ( !($filesys->can('rename') &&
-             ref($filesys) eq ref($destHandler) )) {
+    if ( !( $filesys->can('rename') && ref($filesys) eq ref($destHandler) ) ) {
 
         # Rename not supported by the handler, or renaming to a different
         # handler. Perform a copy and then a delete, something that makes
         # sense but has specific drawbacks according to the WebDAV book.
-        my $copy_result = $this->COPY( $request );
+        my $copy_result = $this->COPY($request);
 
         if ( $copy_result != OK ) {
             if ( $copy_result == HTTP_PRECONDITION_FAILED ) {
@@ -658,7 +657,7 @@ sub MOVE {
         }
 
         unless ( $filesys->test( 'e', $path ) ) {
-            $this->_trace(2, $path, 'does not exist');
+            $this->_trace( 2, $path, 'does not exist' );
             return HTTP_FORBIDDEN;
         }
         if ( $filesys->test( 'd', $path ) ) {
@@ -668,27 +667,26 @@ sub MOVE {
             # a list of all files under the specified path recursively.
             my @files = grep { $_ !~ m|/\.\.?$| }
               map { s|/+|/|g; $_ }    # Replace multiple slashes with single
-                File::Find::Rule::Filesys::Virtual->virtual(
-                    $filesys)->in($path),
-                      $path;
+              File::Find::Rule::Filesys::Virtual->virtual($filesys)->in($path),
+              $path;
 
             foreach my $file (@files) {
                 next unless $filesys->test( 'e', $file );
 
                 if ( $filesys->test( 'd', $file ) ) {
-                    unless ($filesys->rmdir($file)) {
-                        $this->_trace(2, 'rmdir', $file, 'failed:', $!);
+                    unless ( $filesys->rmdir($file) ) {
+                        $this->_trace( 2, 'rmdir', $file, 'failed:', $! );
                     }
                 }
                 else {
-                    unless( $filesys->delete($file)) {
-                        $this->_trace(2, 'delete', $file, 'failed:', $!);
+                    unless ( $filesys->delete($file) ) {
+                        $this->_trace( 2, 'delete', $file, 'failed:', $! );
                     }
                 }
             }
         }
         elsif ( !$filesys->delete($path) ) {
-            $this->_trace(2, 'delete', $path, 'failed:', $!);
+            $this->_trace( 2, 'delete', $path, 'failed:', $! );
             return HTTP_FORBIDDEN;
         }
     }
@@ -697,15 +695,15 @@ sub MOVE {
         # rename supported in the handler, and the source handler is the
         # same class as the destination handler.
         if ( !$filesys->test( 'r', $path ) ) {
-            $this->_trace(2, $path, 'is not readable');
+            $this->_trace( 2, $path, 'is not readable' );
             return HTTP_FORBIDDEN;
         }
         if ( !$filesys->rename( $path, $destination ) ) {
             if ( $! == POSIX::ENOLCK ) {
-                $this->_trace(2, $path, 'is locked');
+                $this->_trace( 2, $path, 'is locked' );
                 return HTTP_LOCKED;
             }
-            $this->_trace(2, $path, 'rename', $path, 'failed;', $!);
+            $this->_trace( 2, $path, 'rename', $path, 'failed;', $! );
             $request->status(HTTP_UNPROCESSABLE_ENTITY);
             return HTTP_FORBIDDEN;
         }
@@ -730,7 +728,7 @@ sub OPTIONS {
 sub PROPFIND {
     my ( $this, $request, $content ) = @_;
     my $depth = ( $request->headers_in->get('Depth') || 0 );
-    my $uri =  Encode::decode_utf8( $request->uri() );
+    my $uri = Encode::decode_utf8( $request->uri() );
 
     # Make sure the resource exists
     if ( !$filesys->test( 'e', $uri ) ) {
@@ -750,9 +748,11 @@ sub PROPFIND {
 
         @files = $filesys->list($uri);
 
- 	#meyer: Remove entry '..' but keep '.'.
+        # meyer@modell-aachen.de:
+        # Fix for MS Mini-Redir: remove .. but keep .
         @files = grep( $_ !~ /^\.\.$/, @files );
-
+        # remove . and .. from the list
+        # @files = grep( $_ !~ /^\.\.?$/, @files );
 
         # Add a trailing slash to the directory if there isn't one already
         if ( $uri !~ /\/$/ ) {
@@ -760,7 +760,7 @@ sub PROPFIND {
         }
 
         # Add the current folder to the front of the filename
-        @files = map { $uri.$_ } @files;
+        @files = map { $uri . $_ } @files;
 
         my %seen = map { $_ => 1 } @files;
 
@@ -768,12 +768,12 @@ sub PROPFIND {
         # but don't exist in the filesystem.
         my @locks =
           map { $_->{path} }
-            grep { !$seen{$_->{path}} && $_->{path} =~ m#^$uri/*[^/]+$# }
-              $filesys->get_locks($uri, 1);
+          grep { !$seen{ $_->{path} } && $_->{path} =~ m#^$uri/*[^/]+$# }
+          $filesys->get_locks( $uri, 1 );
 
-        $this->_trace(4, "Lock-nulls: ", @locks);
+        $this->_trace( 4, "Lock-nulls: ", @locks );
 
-        push ( @files, @locks );
+        push( @files, @locks );
     }
 
     # (9.1) A client may choose not to submit a request body. An empty
@@ -784,45 +784,48 @@ sub PROPFIND {
     if ($content) {
 
         my $indoc;
-        eval {
-            $indoc = _XMLParser->parse_string($content);
-        };
+        eval { $indoc = _XMLParser->parse_string($content); };
 
         if ($@) {
-            $this->_trace(1, $@);
+            $this->_trace( 1, $@ );
             return HTTP_BAD_REQUEST;
         }
-        if (!$indoc) {
-            $this->_trace(1, 'No document');
+        if ( !$indoc ) {
+            $this->_trace( 1, 'No document' );
             return HTTP_BAD_REQUEST;
         }
-        if (_hasNullNamespace($indoc)) {
-            $this->_trace(1, 'Null namespace');
+        if ( _hasNullNamespace($indoc) ) {
+            $this->_trace( 1, 'Null namespace' );
             return HTTP_BAD_REQUEST;
         }
         my $fc = _firstChildNode($indoc);
-        if (_fullName($fc) ne '{DAV:}propfind') {
-            $this->_trace(1, 'Not propfind');
-            return HTTP_BAD_REQUEST ;
+        if ( _fullName($fc) ne '{DAV:}propfind' ) {
+            $this->_trace( 1, 'Not propfind' );
+            return HTTP_BAD_REQUEST;
         }
 
-        for (my $node = $fc->firstChild; $node; $node = $node->nextSibling) {
-            next unless ($node->nodeType == 1);
-            if (_fullName($node) eq '{DAV:}allprop') {
+        for ( my $node = $fc->firstChild ; $node ; $node = $node->nextSibling )
+        {
+            next unless ( $node->nodeType == 1 );
+            if ( _fullName($node) eq '{DAV:}allprop' ) {
                 $mode = 'allprop';
-            } elsif (_fullName($node) eq '{DAV:}propname') {
+            }
+            elsif ( _fullName($node) eq '{DAV:}propname' ) {
                 $mode = 'propname';
-            } elsif (_fullName($node) eq '{DAV:}prop') {
+            }
+            elsif ( _fullName($node) eq '{DAV:}prop' ) {
                 my $prop = $node->firstChild;
                 while ($prop) {
-                    if ($prop->nodeType == 1) {
+                    if ( $prop->nodeType == 1 ) {
                         my $name = _fullName($prop);
+
                         #print STDERR "get $name\n";
                         $named{$name} = 1;
                     }
                     $prop = $prop->nextSibling;
                 }
-            } else {
+            }
+            else {
                 die _fullName($node);
             }
         }
@@ -852,15 +855,15 @@ sub PROPFIND {
             %want = %named;
         }
 
-        my $response = $this->_xml_add_element($multistat, 'D:response');
-        $this->_xml_add_href($response, $path, 1);
+        my $response = $this->_xml_add_element( $multistat, 'D:response' );
+        $this->_xml_add_href( $response, $path, 1 );
 
         my %statuses;
         local $statCache;
         foreach my $propname ( keys %want ) {
             $this->_xml_find_props( $path, $propname, $mode, \%statuses );
         }
-        $this->_xml_add_propstat($response, %statuses);
+        $this->_xml_add_propstat( $response, %statuses );
     }
 
     $this->_trace( 4, $outdoc );
@@ -872,13 +875,13 @@ sub PROPFIND {
 sub PUT {
     my ( $this, $request, $content ) = @_;
 
-    my $path =  Encode::decode_utf8( $request->uri() );
+    my $path = Encode::decode_utf8( $request->uri() );
 
     # Check the locks
-    my @errors = $this->_checkLocks($request, 1, undef, $path);
+    my @errors = $this->_checkLocks( $request, 1, undef, $path );
 
-    if (scalar(@errors)) {
-        return $this->_emitErrorReport($request, @errors);
+    if ( scalar(@errors) ) {
+        return $this->_emitErrorReport( $request, @errors );
     }
 
     my $fh = $filesys->open_write($path);
@@ -912,37 +915,43 @@ sub PUT {
 sub LOCK {
     my ( $this, $request, $content ) = @_;
 
-    my $path =  Encode::decode_utf8( $request->uri() );
+    my $path = Encode::decode_utf8( $request->uri() );
 
-    return DECLINED unless ( $filesys->can('add_lock'));
+    return DECLINED unless ( $filesys->can('add_lock') );
 
     # Get legal headers
-    my $depth = $request->headers_in->get('Depth');
-    my $timeout = $request->headers_in->get('Timeout');
-    my @if = $this->_parseIfHeader($request);
+    my $depth    = $request->headers_in->get('Depth');
+    my $timeout  = $request->headers_in->get('Timeout');
+    my @if       = $this->_parseIfHeader($request);
     my %lockstat = ( exclusive => 1, depth => 0, timeout => -1 );
 
-    if (defined $depth) {
-        if ($depth =~ /^infinit/i) {
+    if ( defined $depth ) {
+        if ( $depth =~ /^infinit/i ) {
             $lockstat{depth} = -1;
-        } elsif ($depth eq '0') {
+        }
+        elsif ( $depth eq '0' ) {
             $lockstat{depth} = 0;
-        } else {
-            $this->_trace(1, "Bad depth $depth");
+        }
+        else {
+            $this->_trace( 1, "Bad depth $depth" );
             return HTTP_BAD_REQUEST;
         }
-    } else {
+    }
+    else {
         $lockstat{depth} = -1;
     }
 
-    if (defined $timeout) {
-        if ($timeout =~ /Second-(\d+)/i ) {
+    if ( defined $timeout ) {
+        if ( $timeout =~ /Second-(\d+)/i ) {
             $lockstat{timeout} = $1;
-        } elsif ($timeout =~ /^infinit/i) {
+        }
+        elsif ( $timeout =~ /^infinit/i ) {
             $lockstat{timeout} = -1;
-        } else {
+        }
+        else {
+
             # SMELL: could do better
-            $this->_trace(1, "Can't handle timeout $timeout");
+            $this->_trace( 1, "Can't handle timeout $timeout" );
             return HTTP_BAD_REQUEST;
         }
     }
@@ -952,130 +961,131 @@ sub LOCK {
     # See if we have content (must be a lockinfo)
     if ($content) {
         my $indoc;
-        eval {
-            $indoc = _XMLParser->parse_string($content);
-        };
+        eval { $indoc = _XMLParser->parse_string($content); };
         if ($@) {
-            $this->_trace(1, $@);
+            $this->_trace( 1, $@ );
             return HTTP_BAD_REQUEST;
         }
-        if (!$indoc) {
-            $this->_trace(1, 'No document');
+        if ( !$indoc ) {
+            $this->_trace( 1, 'No document' );
             return HTTP_BAD_REQUEST;
         }
 
         my $fc = _firstChildNode($indoc);
-        if (_fullName($fc) ne '{DAV:}lockinfo') {
-            $this->_trace(1, 'lockinfo expected');       
+        if ( _fullName($fc) ne '{DAV:}lockinfo' ) {
+            $this->_trace( 1, 'lockinfo expected' );
             return HTTP_BAD_REQUEST;
         }
 
-        for (my $li = $fc->firstChild; $li; $li = $li->nextSibling) {
+        for ( my $li = $fc->firstChild ; $li ; $li = $li->nextSibling ) {
             next unless $li->nodeType == 1;
-            my $fn = _fullName($li);
-            my $brat = _firstChildNode($li);;
-            next unless (defined $brat);
-            if ($fn eq '{DAV:}lockscope') {
+            my $fn   = _fullName($li);
+            my $brat = _firstChildNode($li);
+            next unless ( defined $brat );
+            if ( $fn eq '{DAV:}lockscope' ) {
                 my $lockscope = _fullName($brat);
-                if ($lockscope eq '{DAV:}shared') {
+                if ( $lockscope eq '{DAV:}shared' ) {
                     $lockstat{exclusive} = 0;
-                } elsif ($lockscope ne '{DAV:}exclusive') {
-                    $this->_trace(1, "Bad lockscope ", $lockscope);
+                }
+                elsif ( $lockscope ne '{DAV:}exclusive' ) {
+                    $this->_trace( 1, "Bad lockscope ", $lockscope );
                     return HTTP_BAD_REQUEST;
                 }
                 next;
             }
-            if ($fn eq '{DAV:}locktype') {
+            if ( $fn eq '{DAV:}locktype' ) {
                 my $locktype = _fullName($brat);
-                if ($locktype ne '{DAV:}write') {
-                    $this->_trace(1, 'Bad locktype', $locktype);
+                if ( $locktype ne '{DAV:}write' ) {
+                    $this->_trace( 1, 'Bad locktype', $locktype );
                     return HTTP_BAD_REQUEST;
                 }
                 next;
             }
-            if ($fn eq '{DAV:}owner') {
-                $lockstat{owner} = $brat->toString();
+            if ( $fn eq '{DAV:}owner' ) {
+                # $lockstat{owner} = $brat->toString();
 
+                #TODO: possible workaround for office 2010 LOCK payload
+                #$lockstat{owner} =~ s/<D:href>(.*)\\\\(.*)<\/D:href>/$1/;
+                #print STDERR "BRAT--------------".$lockstat{owner}."\n";
 
-
-#TODO: possible workaround for office 2010 LOCK payload
-#$lockstat{owner} =~ s/<D:href>(.*)\\\\(.*)<\/D:href>/$1/;
-#print STDERR "BRAT--------------".$lockstat{owner}."\n";
-
-                # meyer:
-                # NTLM
-                $lockstat{owner} =~ s/<D:href>(.*)\\(.*)<\/D:href>/$2/;
-                # Windows Principal
-                $lockstat{owner} =~ s/<D:href>(.*)\@(.*)<\/D:href>/$1/;
+		# meyer@modell-aachen.de:
+		# According to RFC3744 - 5.1.1 - just remove the href tag.
+                my $lockowner = $brat->toString();
+		$lockowner =~ s/<D:href>(.*)<\/D:href>/$1/;
+                $lockstat{owner} = $lockowner;
                 next;
             }
-            if ($li->nodeType == 1) {
-                $this->_trace(1, 'Unrecognised lockinfo', $fn);
+            if ( $li->nodeType == 1 ) {
+                $this->_trace( 1, 'Unrecognised lockinfo', $fn );
                 return HTTP_BAD_REQUEST;
             }
         }
-    } else {
+    }
+    else {
+
         # Lock refresh
         $action = 'refresh';
     }
 
     # Check the locks. Shared locks are OK.
-    my @errors = $this->_checkLocks(
-        $request, $lockstat{exclusive}, undef, $path);
+    my @errors =
+      $this->_checkLocks( $request, $lockstat{exclusive}, undef, $path );
 
-    if (scalar(@errors)) {
-        return $this->_emitErrorReport($request, @errors);
+    if ( scalar(@errors) ) {
+        return $this->_emitErrorReport( $request, @errors );
     }
 
     # (7.4) If the resource doesn't exist, the simple action of creating
     # the lock record will give it 'lock-null' status
 
-    $this->_trace(4, 'Lock is:', map { "$_=>$lockstat{$_}" } keys %lockstat);
+    $this->_trace( 4, 'Lock is:', map { "$_=>$lockstat{$_}" } keys %lockstat );
 
     # Check for exclusive locks
-    my @failedPaths = $this->_getBadLocks(
-        0, \@if, $filesys->get_locks($path, 1));
+    my @failedPaths =
+      $this->_getBadLocks( 0, \@if, $filesys->get_locks( $path, 1 ) );
 
-    if (scalar(@failedPaths)) {
+    if ( scalar(@failedPaths) ) {
+
         # Something could not be locked.
         my $multistat = $this->_xml_new_reply('D:multistatus');
         foreach my $bumPath (@failedPaths) {
-            my $response = $this->_xml_add_element($multistat, 'D:response');
-            $this->_xml_add_href($response, $bumPath, 1);
-            $this->_xml_add_status($response, 403);
+            my $response = $this->_xml_add_element( $multistat, 'D:response' );
+            $this->_xml_add_href( $response, $bumPath, 1 );
+            $this->_xml_add_status( $response, 403 );
         }
 
-        my $response = $this->_xml_add_element($multistat, 'D:response');
-        $this->_xml_add_href($response, $path, 1);
-        my $propstat = $this->_xml_add_element($multistat, 'D:propstat');
-        my $prop = $this->_xml_add_element($propstat, 'D:prop');
-        my $disco = $this->_xml_add_element($propstat, 'D:lockdiscovery');
-        $this->_xml_fill_lockdiscovery(
-            $disco, $filesys->get_locks($path, 1));
-        $this->_xml_add_status($propstat, 424);
+        my $response = $this->_xml_add_element( $multistat, 'D:response' );
+        $this->_xml_add_href( $response, $path, 1 );
+        my $propstat = $this->_xml_add_element( $multistat, 'D:propstat' );
+        my $prop     = $this->_xml_add_element( $propstat,  'D:prop' );
+        my $disco    = $this->_xml_add_element( $propstat,  'D:lockdiscovery' );
+        $this->_xml_fill_lockdiscovery( $disco,
+            $filesys->get_locks( $path, 1 ) );
+        $this->_xml_add_status( $propstat, 424 );
 
         $this->_trace( 4, $outdoc );
         _emitBody( $outdoc->toString(0), $request );
 
         return HTTP_MULTI_STATUS;
-    } else {
+    }
+    else {
         my $locktoken;
-        if ($action eq 'new') {
-            $locktoken = 'opaquelocktoken:'.APR::UUID->new->format;
-            $filesys->add_lock(
-                path => $path, token => $locktoken, %lockstat );
+        if ( $action eq 'new' ) {
+            $locktoken = 'opaquelocktoken:' . APR::UUID->new->format;
+            $filesys->add_lock( path => $path, token => $locktoken, %lockstat );
             $request->headers_out->set( 'Lock-Token' => '' . $locktoken );
-        } else {
+        }
+        else {
             $locktoken = $if[0]->{token};
-            $filesys->refresh_lock( $locktoken );
+            $filesys->refresh_lock($locktoken);
         }
         $lockstat{token} = $locktoken;
 
         # Resource was successfully locked. If the resource does not exist,
         # it will be seen as a lock-null resource.
         my $prop = $this->_xml_new_reply('D:prop');
-        my $disco = $this->_xml_add_element($prop, 'D:lockdiscovery');
-        $this->_xml_fill_lockdiscovery($disco, \%lockstat);
+        my $disco = $this->_xml_add_element( $prop, 'D:lockdiscovery' );
+        $this->_xml_fill_lockdiscovery( $disco, \%lockstat );
 
         $request->status(HTTP_OK);
         $request->content_type('text/xml; charset="utf-8"');
@@ -1090,15 +1100,21 @@ sub LOCK {
 sub UNLOCK {
     my ( $this, $request ) = @_;
 
-    my $path =  Encode::decode_utf8( $request->uri() );
-
+    my $path = Encode::decode_utf8( $request->uri() );
     my $locktoken = $request->headers_in->get('Lock-Token');
     $locktoken =~ s/<(.*)>/$1/;
-    if ($filesys->remove_lock($locktoken)) {
+
+    # meyer@modell-aachen.de
+    # Fix:
+    # Returning a 403 although there is no lock for the given token 
+    # will prevent MS Office from sending a proper lockinfo request.
+    # (Office keeps its token until the according lock is released)
+    my $hasLock = $filesys->has_lock( $locktoken );
+    if ( $filesys->remove_lock($locktoken) || !$hasLock ) {
         $request->status(HTTP_NO_CONTENT);
         return OK;
     }
-    $this->_trace(1, 'Could not unlock', $path);
+    $this->_trace( 1, 'Could not unlock', $path );
     return HTTP_FORBIDDEN;
 }
 
@@ -1122,9 +1138,9 @@ sub _trace {
 
 # Find the first non-text child node of an XML node
 sub _firstChildNode {
-    my $node = shift;
+    my $node  = shift;
     my $child = $node->firstChild;
-    while ($child && $child->nodeType != 1) {
+    while ( $child && $child->nodeType != 1 ) {
         $child = $child->nextSibling;
     }
     return $child;
@@ -1138,46 +1154,54 @@ sub _firstChildNode {
 sub _fullName {
     my $node = shift;
     return '' unless $node;
-    return $node->nodeName unless $node->nodeType eq 1; # elements
+    return $node->nodeName unless $node->nodeType eq 1;    # elements
     my $ns = $node->namespaceURI();
-    if (defined $ns) {
-        return "{$ns}".$node->localname;
+    if ( defined $ns ) {
+        return "{$ns}" . $node->localname;
     }
+
     # Check for the null namespace, in case it was defined
     my @nses = $node->getNamespaces();
     foreach my $n (@nses) {
-        if (ref($n) eq 'XML::LibXML::Namespace') {
-            return '{'.$n->getData().'}'.$node->localname;
+        if ( ref($n) eq 'XML::LibXML::Namespace' ) {
+            return '{' . $n->getData() . '}' . $node->localname;
         }
     }
+
     # (8.1.3) all elements which do not explicitly state the
     # namespace to which they belong are members of the "DAV:"
     # namespace schema.
-    return "{DAV:}".$node->localname;
+    return "{DAV:}" . $node->localname;
 }
 
 # Test for different user agents
 sub _clientIsWebDrive {
-    my ($this, $request) = @_;
+    my ( $this, $request ) = @_;
     return $request->headers_in->get('User-Agent') =~ /WebDrive/;
 }
 
 sub _clientIsLitmus {
-    my ($this, $request) = @_;
+    my ( $this, $request ) = @_;
     return $request->headers_in->get('User-Agent') =~ /litmus/;
+}
+
+sub _clientIsOfficeCoreStorage {
+    my ( $this, $request ) = @_;
+    return $request->headers_in->get('User-Agent') =~ /Microsoft Office Core Storage Infrastructure/;
 }
 
 # (7.4) See if any of these resources are lock null (they don't exist in the
 # filesystem, but have active locks)
 sub _isLockNullResource {
-    my ($this, $request, @files) = @_;
+    my ( $this, $request, @files ) = @_;
     my $handler = $filesys;
     foreach my $file (@files) {
         my @locks = $handler->get_locks($file);
         foreach my $lock (@locks) {
+
             # If the resource doesn't exist, this is a lock-null
-            unless ($handler->test( 'e', $file)) {
-                $this->_trace(1, 'Lock-null because of', $file);
+            unless ( $handler->test( 'e', $file ) ) {
+                $this->_trace( 1, 'Lock-null because of', $file );
                 return 1;
             }
         }
@@ -1189,18 +1213,18 @@ sub _isLockNullResource {
 # but we don't have a lock token for as an error message suitable
 # for use with _emitErrorReport
 sub _checkLocks {
-    my ($this, $request, $checkShared, $handler, @files) = @_;
+    my ( $this, $request, $checkShared, $handler, @files ) = @_;
     $handler ||= $filesys;
     my %did;
-    my @if = $this->_parseIfHeader($request);
+    my @if     = $this->_parseIfHeader($request);
     my @errors = ();
     foreach my $file (@files) {
         next if $did{$file};
         $did{$file} = 1;
-        my @fails = $this->_getBadLocks(
-            $checkShared, \@if, $handler->get_locks($file));
+        my @fails =
+          $this->_getBadLocks( $checkShared, \@if, $handler->get_locks($file) );
         foreach my $fail (@fails) {
-            push(@errors, { file => $fail, status => HTTP_LOCKED });
+            push( @errors, { file => $fail, status => HTTP_LOCKED } );
         }
     }
     return @errors;
@@ -1209,20 +1233,21 @@ sub _checkLocks {
 # Check if any of the listed locks meet the criteria expressed in an
 # If: header
 sub _getBadLocks {
-    my ($this, $checkShared, $if, @locks) = @_;
+    my ( $this, $checkShared, $if, @locks ) = @_;
     my @failedPaths;
-LOCK:
+  LOCK:
     foreach my $lock (@locks) {
         if ( $checkShared || $lock->{exclusive} ) {
             foreach my $i (@$if) {
                 next unless defined $i->{token};
-                next LOCK if
-                  ($i->{token} eq $lock->{token} && !$i->{invert})
-                    || ($i->{token} ne $lock->{token} && $i->{invert});
+                next LOCK
+                  if ( $i->{token} eq $lock->{token} && !$i->{invert} )
+                  || ( $i->{token} ne $lock->{token} && $i->{invert} );
             }
+
             # SMELL: Must check the owner
-            push(@failedPaths, $lock->{path});
-            $this->_trace(4, 'LOCKED', Data::Dumper->Dump([$lock]));
+            push( @failedPaths, $lock->{path} );
+            $this->_trace( 4, 'LOCKED', Data::Dumper->Dump( [$lock] ) );
         }
     }
     return @failedPaths;
@@ -1231,19 +1256,25 @@ LOCK:
 # Emit a multistatus report of the errors in @errors, each of the format
 # { file => ..., status => ... }
 sub _emitErrorReport {
-    my ($this, $request, @errors) = @_;
+    my ( $this, $request, @errors ) = @_;
 
     # SMELL: litmus doesn't understand a multistatus response to
     # the delete request, despite it being exactly as shown in the spec
     return HTTP_LOCKED
       if $this->_clientIsLitmus($request) || $request->header_only();
 
+    # meyer@modell-aachen.de:
+    # It seems as if MS Office (at least 2010) doesn't parse the multistatus response.
+    # Returning HTTP_LOCKED works as expected.
+    return HTTP_LOCKED
+      if $this->_clientIsOfficeCoreStorage( $request );
+
     # Many errors, return multistatus
     my $multistat = $this->_xml_new_reply('D:multistatus');
     foreach my $error (@errors) {
-        my $response = $this->_xml_add_element($multistat, 'D:response');
-        $this->_xml_add_href($response, $error->{file}, 1);
-        $this->_xml_add_status($response, $error->{status});
+        my $response = $this->_xml_add_element( $multistat, 'D:response' );
+        $this->_xml_add_href( $response, $error->{file}, 1 );
+        $this->_xml_add_status( $response, $error->{status} );
     }
 
     $request->content_type('text/xml; charset="utf-8"');
@@ -1256,14 +1287,14 @@ sub _emitErrorReport {
 }
 
 sub _xml_add_element {
-    my ($this, $parent, $el) = @_;
+    my ( $this, $parent, $el ) = @_;
     my $node = $outdoc->createElement($el);
     $parent->addChild($node);
     return $node;
 }
 
 sub _xml_new_reply {
-    my ($this, $rootel) = @_;
+    my ( $this, $rootel ) = @_;
     $outdoc = new XML::LibXML::Document( '1.0', 'utf-8' );
     my $root = $outdoc->createElement($rootel);
     $root->setAttribute( 'xmlns:D', 'DAV:' );
@@ -1272,43 +1303,45 @@ sub _xml_new_reply {
 }
 
 sub _xml_add_href {
-    my ($this, $response, $path, $encode) = @_;
+    my ( $this, $response, $path, $encode ) = @_;
     if ($encode) {
-        $path = join('/',
-            map { URI::Escape::uri_escape( Encode::encode_utf8( $_ )) }
-              split(/\/+/, $path) );
+        $path = join( '/',
+            map { URI::Escape::uri_escape( Encode::encode_utf8($_) ) }
+              split( /\/+/, $path ) );
     }
     $response->appendTextChild( 'D:href' => $path );
 }
 
 # Generate the lockdiscovery content for the locks in @locks
 sub _xml_fill_lockdiscovery {
-    my ($this, $disco, @locks) = @_;
+    my ( $this, $disco, @locks ) = @_;
 
     foreach my $lock (@locks) {
-        my $alock = $this->_xml_add_element($disco, 'D:activelock');
+        my $alock = $this->_xml_add_element( $disco, 'D:activelock' );
 
-        my $e = $this->_xml_add_element($alock, 'D:lockscope');
-        $this->_xml_add_element(
-            $e, 'D:'.($lock->{exclusive} ? 'exclusive' : 'shared'));
+        my $e = $this->_xml_add_element( $alock, 'D:lockscope' );
+        $this->_xml_add_element( $e,
+            'D:' . ( $lock->{exclusive} ? 'exclusive' : 'shared' ) );
 
         $alock->appendTextChild(
             'D:depth' => $lock->{depth} < 0 ? 'Infinity' : $lock->{depth} );
 
-        $e = $this->_xml_add_element($alock, 'D:locktype');
-        $this->_xml_add_element($e, 'D:write');
+        $e = $this->_xml_add_element( $alock, 'D:locktype' );
+        $this->_xml_add_element( $e, 'D:write' );
 
-        if ($lock->{owner}) {
-            $e = $this->_xml_add_element($alock, 'D:owner');
-            $this->_xml_add_href($e, $lock->{owner}, 0 );
+        if ( $lock->{owner} ) {
+            $e = $this->_xml_add_element( $alock, 'D:owner' );
+            $this->_xml_add_href( $e, $lock->{owner}, 0 );
         }
 
-        $e = $this->_xml_add_element($alock, 'D:locktoken');
-        $this->_xml_add_href($e, $lock->{token}, 0 );
+        $e = $this->_xml_add_element( $alock, 'D:locktoken' );
+        $this->_xml_add_href( $e, $lock->{token}, 0 );
 
         $alock->appendTextChild(
-            'D:timeout' => $lock->{timeout} < 0
-              ? 'Infinite' : "Second-$lock->{timeout}" );
+              'D:timeout' => $lock->{timeout} < 0
+            ? 'Infinite'
+            : "Second-$lock->{timeout}"
+        );
     }
 }
 
@@ -1326,11 +1359,11 @@ sub _hasNullNamespace {
     my $node = shift;
     my @nses = $node->getNamespaces();
     foreach my $n (@nses) {
-        if (ref($n) eq 'XML::LibXML::Namespace') {
+        if ( ref($n) eq 'XML::LibXML::Namespace' ) {
             return 1 if $n->declaredPrefix() && !$n->declaredURI();
         }
     }
-    for (my $sn = $node->firstChild; $sn; $sn = $sn->nextSibling) {
+    for ( my $sn = $node->firstChild ; $sn ; $sn = $sn->nextSibling ) {
         next unless $sn->nodeType == 1;
         return 1 if _hasNullNamespace($sn);
     }
@@ -1348,65 +1381,65 @@ sub _hasNullNamespace {
 #
 # Returns a list of constraints
 sub _parseIfHeader {
-    my ($this, $request) = @_;
+    my ( $this, $request ) = @_;
     my $if = $request->headers_in->get('If');
     return () unless defined $if;
 
     # meyer@modell-aachen.de:
-    # Some clients (e.g. MS Office 2010 & 2013) omit the angle brackets
-    # when sending the lock-token. That behaviour will cause the loop
-    # below to run infinitely. As "hotfix" we just add them.
+    # Fix for MS Office 2010 and greater
     if ( $if =~ /opaquelocktoken/ ) {
-        if ( $if !~ m/^\s*\(<{1}(.*?)>{1}\)\s*$/ ) {
-            $if =~ s/^\s*(\(){1}(.*?)(\))\s*$/$1<$2>$3/;
+        if ( $if !~ m/^\s*\(<(.*?)>\)\s*$/ ) {
+            $if =~ s/^\s*\((.*?)\)\s*$/\(<$1>\)/;
         }
     }
 
     my @headers = ();
 
-    while ($if =~ /\S/) {
+    while ( $if =~ /\S/ ) {
         my $match = {};
-        if ($if =~ s/^\s*<(.*?)>//) {
+        if ( $if =~ s/^\s*<(.*?)>// ) {
+
             # coded URL
             $match->{resource} = $1;
         }
-        if ($if =~ s/^\s*\(//) {
-            if ($if =~ s/^\s*Not//) {
+        if ( $if =~ s/^\s*\(// ) {
+            if ( $if =~ s/^\s*Not// ) {
                 $match->{invert} = 1;
             }
-            if ($if =~ s/^\s*\[\s*\"(.*?)\"\s*\]//) {
+            if ( $if =~ s/^\s*\[\s*\"(.*?)\"\s*\]// ) {
                 $match->{etag} = $1;
-            } elsif ($if =~ s/^\s*<(.*?)>//) {
+            }
+            elsif ( $if =~ s/^\s*<(.*?)>// ) {
                 $match->{token} = $1;
             }
             $if =~ s/^\s*\)//;
         }
-        push(@headers, $match);
+        push( @headers, $match );
     }
     return @headers;
 }
 
 sub _xml_add_status {
-    my ($this, $propstat, $code) = @_;
-    my $stat = $this->_xml_add_element($propstat, 'D:status');
+    my ( $this, $propstat, $code ) = @_;
+    my $stat = $this->_xml_add_element( $propstat, 'D:status' );
     $stat->appendText(
-        'HTTP/1.1 '.Apache2::RequestUtil::get_status_line($code));
+        'HTTP/1.1 ' . Apache2::RequestUtil::get_status_line($code) );
 }
 
 # Add <D:propstat> to a response
 sub _xml_add_propstat {
-    my ($this, $response, %statuses) = @_;
+    my ( $this, $response, %statuses ) = @_;
 
     my $doc = $response->ownerDocument;
-    foreach my $status (keys %statuses) {
+    foreach my $status ( keys %statuses ) {
         my $propstat = $doc->createElement('D:propstat');
-        my $prop = $doc->createElement('D:prop');
-        foreach my $pel (@{$statuses{$status}}) {
+        my $prop     = $doc->createElement('D:prop');
+        foreach my $pel ( @{ $statuses{$status} } ) {
             next unless $pel->firstChild;
-            $prop->addChild($pel->firstChild);
+            $prop->addChild( $pel->firstChild );
         }
         $propstat->addChild($prop);
-        $this->_xml_add_status($propstat, $status);
+        $this->_xml_add_status( $propstat, $status );
         $response->addChild($propstat);
     }
 }
@@ -1436,7 +1469,7 @@ sub _xml_find_props {
         }
     }
 
-    push(@{$statuses->{$status}}, $propel );
+    push( @{ $statuses->{$status} }, $propel );
 }
 
 # Add an XML element for a property
@@ -1445,7 +1478,7 @@ sub _xml_add_propel {
     my $datum;
     if ( $name =~ /{(.*)}(.*?)$/ ) {
         if ( $1 eq 'DAV:' ) {
-            $datum = $this->_xml_add_element($parent, "D:$2");
+            $datum = $this->_xml_add_element( $parent, "D:$2" );
         }
         else {
             $datum = $outdoc->createElementNS( $1, $2 );
@@ -1453,7 +1486,7 @@ sub _xml_add_propel {
         }
     }
     else {
-        $datum = $this->_xml_add_element($parent, $name);
+        $datum = $this->_xml_add_element( $parent, $name );
     }
     return $datum;
 }
@@ -1463,7 +1496,7 @@ sub _xml_add_propel {
 sub _xml_fill_live_prop {
     my ( $this, $datum, $path, $name ) = @_;
 
-    unless ( $statCache ) {
+    unless ($statCache) {
 
         # The list of properties in the order a stat()
         # call returns.
@@ -1479,54 +1512,56 @@ sub _xml_fill_live_prop {
     }
 
     if ( $name eq '{DAV:}getetag' ) {
+
         # Format consistent with mod_dav_fs
         my $etag;
-        if ($statCache->{ino}) {
-            $etag = sprintf('"%x-%x-%x"',
-                            $statCache->{ino},
-                            $statCache->{getcontentlength} || 0,
-                            $statCache->{getlastmodified} || 0);
-        } else {
-            $etag = sprintf('"%x"',
-                            $statCache->{getlastmodified} || 0);
+        if ( $statCache->{ino} ) {
+            $etag = sprintf( '"%x-%x-%x"',
+                $statCache->{ino},
+                $statCache->{getcontentlength} || 0,
+                $statCache->{getlastmodified}  || 0 );
+        }
+        else {
+            $etag = sprintf( '"%x"', $statCache->{getlastmodified} || 0 );
         }
 
-        $datum->appendText( $etag );
+        $datum->appendText($etag);
     }
     elsif ( $name eq '{DAV:}creationdate' ) {
-        $datum->appendText( _formatISOTime(
-            $statCache->{creationdate} || 0) );
+        $datum->appendText( _formatISOTime( $statCache->{creationdate} || 0 ) );
     }
     elsif ( $name eq '{DAV:}getlastmodified' ) {
-        $datum->appendText( _formatHTTPTime(
-            $statCache->{getlastmodified} || 0) );
+        $datum->appendText(
+            _formatHTTPTime( $statCache->{getlastmodified} || 0 ) );
     }
     elsif ( $name eq '{DAV:}getcontentlength' ) {
-        $datum->appendText( $statCache->{getcontentlength} || 0);
+        $datum->appendText( $statCache->{getcontentlength} || 0 );
     }
-    elsif ( $name eq '{DAV:}supportedlock'
-              && $filesys->can('add_lock') ) {
+    elsif ($name eq '{DAV:}supportedlock'
+        && $filesys->can('add_lock') )
+    {
         my $info = $filesys->lock_types($path);
 
         my @types = ( exclusive => 1, shared => 2 );
-        while (scalar(@types)) {
+        while ( scalar(@types) ) {
             my $k = shift(@types);
             my $n = shift(@types);
-            if ($info & $n) {
-                my $lockentry = $this->_xml_add_element(
-                    $datum, 'D:lockentry');
-                my $lockscope = $this->_xml_add_element(
-                    $lockentry, 'D:lockscope');
-                $this->_xml_add_element($lockscope, 'D:'.$k);
+            if ( $info & $n ) {
+                my $lockentry =
+                  $this->_xml_add_element( $datum, 'D:lockentry' );
+                my $lockscope =
+                  $this->_xml_add_element( $lockentry, 'D:lockscope' );
+                $this->_xml_add_element( $lockscope, 'D:' . $k );
+
                 # Write locks are the only supported lock type
-                my $type  = $this->_xml_add_element($lockentry, 'D:locktype');
-                $this->_xml_add_element($type, 'D:write');
+                my $type = $this->_xml_add_element( $lockentry, 'D:locktype' );
+                $this->_xml_add_element( $type, 'D:write' );
             }
         }
     }
     elsif ( $name eq '{DAV:}resourcetype' ) {
         if ( $filesys->test( 'd', $path ) ) {
-            $this->_xml_add_element($datum, 'D:collection');
+            $this->_xml_add_element( $datum, 'D:collection' );
         }
     }
     elsif ( $name eq '{DAV:}getcontenttype' ) {
@@ -1534,12 +1569,14 @@ sub _xml_fill_live_prop {
             $datum->appendText('httpd/unix-directory');
         }
         else {
-            $datum->appendText('application/octet-stream');
+            my $type =
+              $this->_deduceMimeType($path) || 'application/octet-stream';
+            $datum->appendText($type);
         }
     }
     elsif ( $name eq '{DAV:}lockdiscovery' ) {
-        $this->_xml_fill_lockdiscovery(
-            $datum, $filesys->get_locks($path, 1));
+        $this->_xml_fill_lockdiscovery( $datum,
+            $filesys->get_locks( $path, 1 ) );
     }
     elsif ( $name eq '{DAV:}getcontentlanguage' ) {
         $datum->appendText('');
@@ -1564,11 +1601,12 @@ sub _getContent {
 
     my $content;
     my $length = $request->headers_in->get('Content-Length');
-    my $read = 0;
+    my $read   = 0;
     if ( $length && $length > 0 ) {
         $read = $request->read( $content, $length );
     }
     else {
+
         # Requests from Web Folders are malformed
         my $offset = 0;
         while ( $request->read( $content, 1024, $offset ) == 1024 ) {
@@ -1620,36 +1658,44 @@ sub _getFilesys {
 sub _processAuth {
     my ( $this, $request ) = @_;
 
-    if ( $request->some_auth_required()) {
+    if ( $request->some_auth_required() ) {
+
         # The current request is authenticated
         if ( $filesys->can('login') ) {
+
             # filesystem supports login
 
             # using the apache user
             my $loginName = $request->user();
 
+	    # meyer@modell-aachen.de:
+            # In case we're authenticating users by Kerberos, don't spam the Apache log.
+            return 1;
+
             # Windows insists on sticking the domain in front of the the
             # username. Chop it off if the mini-redirector is requesting.
             my $userAgent = $request->headers_in->get('User-Agent') || '';
-            
-            if( $userAgent =~ m#^Microsoft-WebDAV-MiniRedir#
-                  && !$Foswiki::cfg{WebDAVContrib}{KeepWindowsDomain}
-                    && $loginName =~ /^.*\\(.+)$/) {
+
+            if (   $userAgent =~ m#^Microsoft-WebDAV-MiniRedir#
+                && !$Foswiki::cfg{WebDAVContrib}{KeepWindowsDomain}
+                && $loginName =~ /^.*\\(.+)$/ )
+            {
                 $loginName = $1;
             }
 
-            unless ($filesys->login($loginName)) {
-                $this->_trace( 1, 'Login failed for '.$loginName );
-                
+            unless ( $filesys->login($loginName) ) {
+                $this->_trace( 1, 'Login failed for ' . $loginName );
+
                 # Login failed; reject the request
                 $request->content_type('text/html; charset="utf-8"');
-                _emitBody("ERROR: (401) Can't login as $loginName", $request);
+                _emitBody( "ERROR: (401) Can't login as $loginName", $request );
                 return 0;
             }
             $this->_trace( 2, $loginName . ' logged in' );
-        } else {
+        }
+        else {
             print STDERR 'WebDAV: file system does not support auth';
-            _emitBody("ERROR: (401) Can't login to filesystem", $request);
+            _emitBody( "ERROR: (401) Can't login to filesystem", $request );
             return 0;
         }
     }
@@ -1674,48 +1720,49 @@ sub _formatISOTime {
     return "1970-01-01" unless defined $t;
     my ( $sec, $min, $hour, $day, $mon, $year, $wday, $tz_str ) = gmtime($t);
     return
-      sprintf( '%.4u', $year + 1900 ) . "-"
-        . sprintf( '%.2u', $mon + 1 ) . "-"
-          . sprintf( '%.2u', $day ) . "T"
-            . sprintf( '%.2u', $hour ) . ":"
-              . sprintf( '%.2u', $min ) . ':'
-                . sprintf( '%.2u', $sec ) . "Z";
+        sprintf( '%.4u', $year + 1900 ) . "-"
+      . sprintf( '%.2u', $mon + 1 ) . "-"
+      . sprintf( '%.2u', $day ) . "T"
+      . sprintf( '%.2u', $hour ) . ":"
+      . sprintf( '%.2u', $min ) . ':'
+      . sprintf( '%.2u', $sec ) . "Z";
 }
 
 sub _formatHTTPTime {
     my $t = shift;
-    my( $sec, $min, $hour, $day, $mon, $year, $wday, $tz_str) =
-      gmtime( $t );
+    my ( $sec, $min, $hour, $day, $mon, $year, $wday, $tz_str ) = gmtime($t);
     return
-      $WEEKDAY[$wday].", $day $ISOMONTH[$mon] ".
-        sprintf('%.4u',$year+1900)." ".
-          sprintf('%.2u',$hour).":".sprintf('%.2u',$min).':'.
-            sprintf('%.2u',$sec)." GMT";
+        $WEEKDAY[$wday]
+      . ", $day $ISOMONTH[$mon] "
+      . sprintf( '%.4u', $year + 1900 ) . " "
+      . sprintf( '%.2u', $hour ) . ":"
+      . sprintf( '%.2u', $min ) . ':'
+      . sprintf( '%.2u', $sec ) . " GMT";
 }
 
 # Look up mime types DB to map a file extension to a mime type
 sub _deduceMimeType {
     my ( $this, $path ) = @_;
 
-    return undef unless ($path =~ /\.([^.]*)$/);
+    return undef unless ( $path =~ /\.([^.]*)$/ );
     my $ext = $1;
-    unless ($this->{mimeTypes}) {
-        my $tree = Apache2::Directive::conftree();
+    unless ( $this->{mimeTypes} ) {
+        my $tree        = Apache2::Directive::conftree();
         my $typesConfig = $tree->lookup('TypesConfig');
         my $f;
-        open($f, '<', $typesConfig) || return $!;
+        open( $f, '<', $typesConfig ) || return $!;
         local $/ = "\n";
         my %mimeTypes;
-        while (my $line = <$f>) {
+        while ( my $line = <$f> ) {
             next if $line =~ /^\s*#/;
-            if ($line =~ /(\S+)\s*(.*?)\s*$/) {
+            if ( $line =~ /(\S+)\s*(.*?)\s*$/ ) {
                 my $type = $1;
                 foreach my $extension ( split( /\s+/, $2 ) ) {
                     $mimeTypes{$extension} = $type;
                 }
             }
         }
-        close( $f );
+        close($f);
         $this->{mimeTypes} = \%mimeTypes;
     }
     return $this->{mimeTypes}->{$ext};

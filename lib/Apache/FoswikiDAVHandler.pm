@@ -10,8 +10,8 @@ use Apache2::Module     ();
 use Apache2::RequestRec ();
 
 use Apache::WebDAV;
-our $VERSION          = '$Rev: 1176 $';
-our $RELEASE          = '1.0.2-/jidQrcaozxnxTDSHEh3qA';
+our $VERSION = '$Rev: 1.0.3 $';
+our $RELEASE = '%$RELEASE%';
 
 my @directives = (
     {

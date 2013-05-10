@@ -1,4 +1,4 @@
-%META:TOPICINFO{author="wikiring" date="1252313690" format="1.1" version="1"}%
+%META:TOPICINFO{author="ProjectContributor" date="1290609391" format="1.1" version="1"}%
 ---+!! !WebDAVContrib
 <!--
 One line description, required for extensions repository catalog.
@@ -27,7 +27,7 @@ native applications.
 !Foswiki permissions are honoured throughout.
 
 Use of the FilesysVirtualPlugin means that all the data views supported by
-that module are available to WebDAV clients, so clients can read and write
+that module are available to !WebDAV clients, so clients can read and write
 Foswiki topics as text, as HTML, as a JSON data structure, or as any other
 view supported by FilesysVirtualPlugin.
 
@@ -141,7 +141,6 @@ dav:%CONFURL%/> put packages.txt LoremIpsum.txt
 Progress: [===================>] 100.0% of 320 bytes succeeded
 dav:%CONFURL%/> cat LoremIpsum.txt
 Displaying `/dav/Sandbox/LoremIpsum.txt':
-%META:TOPICINFO{author="BaseUserMapping_666" date="1270856672" format="1.1" version="1.1"}%
 Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do
 eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut
 enim ad minim veniam, quis nostrud exercitation ullamco laboris
@@ -335,7 +334,13 @@ resource types, collections and files).
 
 ---++ License
 
-This software is released under the GNU Public License, version 2. However it cost a lot in blood, sweat and tears to develop, and you are respectfully requested to purchase a support contract (available from http://kontextwork.de). By doing so you not only gain direct access to the support of the most experienced Foswiki developers working on the project, but you are also helping to make the further development of open-source Foswiki possible. 
+This software is released under the GNU Public License, version 2. However it
+cost a lot in blood, sweat and tears to develop, and you are respectfully
+requested to purchase a support contract (available from
+http://kontextwork.de). By doing so you not only gain direct access to the
+support of the most experienced Foswiki developers working on the project, but
+you are also helping to make the further development of open-source Foswiki
+possible. 
 
 ---++ Info
 Another great Foswiki extension from the <a style="text-decoration:none" href="http://wikiring.com"><img src="%ATTACHURLPATH%/wikiringlogo20x20.png" alt="" /> *WikiRing* </a> - working together to improve your wiki experience!
@@ -346,8 +351,8 @@ Many thanks to the following sponsors for supporting this work:
 |  Author(s): | Crawford Currie http://c-dot.co.uk |
 |  Copyright: | &copy; 2008 !KontextWork.de, &copy; 2008-2010 Crawford Currie http://c-dot.co.uk |
 |  License: | [[http://www.gnu.org/licenses/old-licenses/gpl-2.0.html][GPL2 (Gnu General Public License v2)]] |
-|  Release: | 1.0.2-%$TRACKINGCODE% |
-|  Version: | 1176 (2010-08-21) |
+|  Release: | /jidQrcaozxnxTDSHEh3qA |
+|  Version: | 1.0.3 |
 |  Change History: | <!-- versions below in reverse order -->&nbsp; |
 |  Dependencies: | <table class="foswikiTable" border="1"><tr><th>Name</th><th>Version</th><th>Description</th></tr><tr><td align="left">APR::Table</td><td align="left">&gt;=0</td><td align="left">Required, part of Apache mod_perl</td></tr><tr><td align="left">APR::UUID</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">Apache2::Access</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">Apache2::Const</td><td align="left">&gt;=0</td><td align="left">Required, part of Apache mod_perl</td></tr><tr><td align="left">Apache2::Module</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/FoswikiDAVHandler.pm</td></tr><tr><td align="left">Apache2::RequestIO</td><td align="left">&gt;=0</td><td align="left">Required, part of Apache mod_perl</td></tr><tr><td align="left">Apache2::RequestRec</td><td align="left">&gt;=0</td><td align="left">Required, part of Apache mod_perl</td></tr><tr><td align="left">Data::Dumper</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">Encode</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">File::Find::Rule::Filesys::Virtual</td><td align="left">&gt;=0</td><td align="left">Required</td></tr><tr><td align="left">File::Spec</td><td align="left">&gt;=0</td><td align="left">Required, standard perl module</td></tr><tr><td align="left">Foswiki::Plugins::FilesysVirtualPlugin</td><td align="left">&gt;=1</td><td align="left">Required</td></tr><tr><td align="left">POSIX</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">URI</td><td align="left">&gt;=0</td><td align="left">Required, standard perl module</td></tr><tr><td align="left">URI::Escape</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">XML::LibXML</td><td align="left">&gt;=1.64</td><td align="left">Required, standard perl module</td></tr><tr><td align="left">XML::Simple</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr></table> |
 
