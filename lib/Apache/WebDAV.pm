@@ -7,7 +7,7 @@ package Apache::WebDAV;
 use strict;
 use warnings;
 
-our $VERSION = '2.0.0';
+our $VERSION = '2.0.1';
 our $RELEASE = '%$TRACKINGCODE%';
 
 use Apache2::Const qw(:common :http);
@@ -144,7 +144,12 @@ sub _process {
 
         # Don't auth OPTIONS or M$ Office won't be able to talk to us (it
         # doesn't send auth headers with OPTIONS)
-        if ( $method eq 'OPTIONS' || $this->_processAuth($request) ) {
+
+        # meyer@modell-aachen.de:
+        # I don't know why but sometimes MS Office doesn't send an authorization header
+        # for an UNLOCK request. So we don't authenticate that request and relay on the lock-token.
+        # SMELL: Is this safe?
+        if ( $method eq 'OPTIONS' || $method eq 'UNLOCK' || $this->_processAuth($request) ) {
 
             # Trace Litmus special headers for debug
             $this->_trace(
@@ -167,7 +172,6 @@ sub _process {
 
 sub PROPPATCH {
     my ( $this, $request, $content ) = @_;
-
     my $path = Encode::decode_utf8( $request->uri() );
 
     # Don't need the content, unless for debug
@@ -249,7 +253,6 @@ sub PROPPATCH {
 
 sub COPY {
     my ( $this, $request ) = @_;
-
     my $path = Encode::decode_utf8( $request->uri() );
 
     if ( $this->_isLockNullResource( $request, $path ) ) {
@@ -395,7 +398,6 @@ sub COPY {
 
 sub DELETE {
     my ( $this, $request ) = @_;
-
     my $path = Encode::decode_utf8( $request->uri() );
 
     unless ( $filesys->test( 'e', $path ) ) {
@@ -464,7 +466,6 @@ sub DELETE {
 
 sub GET {
     my ( $this, $request ) = @_;
-
     my $path = Encode::decode_utf8( $request->uri() );
 
     if ( $this->_isLockNullResource( $request, $path ) ) {
@@ -533,7 +534,6 @@ sub GET {
 
 sub HEAD {
     my ( $this, $request ) = @_;
-
     my $path = Encode::decode_utf8( $request->uri() );
 
     if ( !$filesys->test( 'e', $path ) ) {
@@ -563,7 +563,6 @@ sub HEAD {
 
 sub MKCOL {
     my ( $this, $request, $content ) = @_;
-
     my $path = Encode::decode_utf8( $request->uri() );
     if ( $filesys->test( 'e', $path ) ) {
         $this->_trace( 1, 'Already exists', $path );
@@ -593,7 +592,6 @@ sub MKCOL {
 
 sub MOVE {
     my ( $this, $request ) = @_;
-
     my $path = Encode::decode_utf8( $request->uri() );
 
     if ( $this->_isLockNullResource( $request, $path ) ) {
@@ -727,6 +725,7 @@ sub OPTIONS {
 
 sub PROPFIND {
     my ( $this, $request, $content ) = @_;
+
     my $depth = ( $request->headers_in->get('Depth') || 0 );
     my $uri = Encode::decode_utf8( $request->uri() );
 
@@ -751,8 +750,6 @@ sub PROPFIND {
         # meyer@modell-aachen.de:
         # Fix for MS Mini-Redir: remove .. but keep .
         @files = grep( $_ !~ /^\.\.$/, @files );
-        # remove . and .. from the list
-        # @files = grep( $_ !~ /^\.\.?$/, @files );
 
         # Add a trailing slash to the directory if there isn't one already
         if ( $uri !~ /\/$/ ) {
@@ -914,7 +911,6 @@ sub PUT {
 
 sub LOCK {
     my ( $this, $request, $content ) = @_;
-
     my $path = Encode::decode_utf8( $request->uri() );
 
     return DECLINED unless ( $filesys->can('add_lock') );
@@ -1011,7 +1007,7 @@ sub LOCK {
 		# meyer@modell-aachen.de:
 		# According to RFC3744 - 5.1.1 - just remove the href tag.
                 my $lockowner = $brat->toString();
-		$lockowner =~ s/<D:href>(.*)<\/D:href>/$1/;
+		$lockowner =~ s/<D:href>(.*)\\(.*)<\/D:href>/$2/;
                 $lockstat{owner} = $lockowner;
                 next;
             }
@@ -1102,6 +1098,14 @@ sub UNLOCK {
 
     my $path = Encode::decode_utf8( $request->uri() );
     my $locktoken = $request->headers_in->get('Lock-Token');
+    
+    # meyer@modell-aachen.de
+    # see below
+    unless ( $locktoken ) {
+        $this->_trace( 1, 'No locktoken given', $path );
+        return HTTP_FORBIDDEN;
+    }
+    
     $locktoken =~ s/<(.*)>/$1/;
 
     # meyer@modell-aachen.de
@@ -1111,7 +1115,7 @@ sub UNLOCK {
     # (Office keeps its token until the according lock is released)
     my $hasLock = $filesys->has_lock( $locktoken );
     if ( $filesys->remove_lock($locktoken) || !$hasLock ) {
-        $request->status(HTTP_NO_CONTENT);
+        $request->status( HTTP_NO_CONTENT );
         return OK;
     }
     $this->_trace( 1, 'Could not unlock', $path );
@@ -1185,9 +1189,18 @@ sub _clientIsLitmus {
     return $request->headers_in->get('User-Agent') =~ /litmus/;
 }
 
-sub _clientIsOfficeCoreStorage {
+sub _clientIsMSOffice {
     my ( $this, $request ) = @_;
-    return $request->headers_in->get('User-Agent') =~ /Microsoft Office Core Storage Infrastructure/;
+    # Office < 2013
+    my $isCoreStorage = $request->headers_in->get('User-Agent') =~ /Microsoft Office Core Storage Infrastructure/;
+    
+    # Office 2013
+    # UAs: Microsoft Office Upload Center 2013 (15.0.4420) Windows NT 6.1
+    #      Microsoft Office Word 2013 (15.0.4420) Windows NT 6.1
+    #      ...
+    my $isOffice2013 = $request->headers_in->get('User-Agent') =~ /Microsoft Office(.+)2013/;
+    
+    return ($isCoreStorage || $isOffice2013);
 }
 
 # (7.4) See if any of these resources are lock null (they don't exist in the
@@ -1264,10 +1277,10 @@ sub _emitErrorReport {
       if $this->_clientIsLitmus($request) || $request->header_only();
 
     # meyer@modell-aachen.de:
-    # It seems as if MS Office (at least 2010) doesn't parse the multistatus response.
-    # Returning HTTP_LOCKED works as expected.
+    # MS Office doesn't parse the multistatus response.
+    # Returning HTTP_LOCKED forces Office to show a "file locked" dialog to the user.
     return HTTP_LOCKED
-      if $this->_clientIsOfficeCoreStorage( $request );
+      if $this->_clientIsMSOffice( $request );
 
     # Many errors, return multistatus
     my $multistat = $this->_xml_new_reply('D:multistatus');
@@ -1668,24 +1681,27 @@ sub _processAuth {
             # using the apache user
             my $loginName = $request->user();
 
-	    # meyer@modell-aachen.de:
-            # In case we're authenticating users by Kerberos, don't spam the Apache log.
-            return 1;
-
             # Windows insists on sticking the domain in front of the the
             # username. Chop it off if the mini-redirector is requesting.
             my $userAgent = $request->headers_in->get('User-Agent') || '';
 
-            if (   $userAgent =~ m#^Microsoft-WebDAV-MiniRedir#
-                && !$Foswiki::cfg{WebDAVContrib}{KeepWindowsDomain}
-                && $loginName =~ /^.*\\(.+)$/ )
-            {
+            # meyer@modell-aachen.de
+            if ( !$Foswiki::cfg{WebDAVContrib}{KeepWindowsDomain} ) {
+              if ( $loginName =~ m/^(.+)\@.*$/ || $loginName =~ m/^.*\\(.+)$/ ) {
                 $loginName = $1;
+              }  
+            }
+
+            # meyer@modell-aachen.de
+            # normalize loginName by using LdapContrib and rewrite to lowercase.
+            if ( $Foswiki::cfg{Ldap}{NormalizeLoginNames} ) {
+              require Foswiki::Contrib::LdapContrib;
+              $loginName = Foswiki::Contrib::LdapContrib::transliterate( $loginName );
+              $loginName = "\L$loginName"
             }
 
             unless ( $filesys->login($loginName) ) {
                 $this->_trace( 1, 'Login failed for ' . $loginName );
-
                 # Login failed; reject the request
                 $request->content_type('text/html; charset="utf-8"');
                 _emitBody( "ERROR: (401) Can't login as $loginName", $request );
