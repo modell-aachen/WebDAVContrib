@@ -117,6 +117,24 @@ sub _process {
     my $uri    = $request->uri();
     my $method = uc( $request->method() );
 
+    # Get the content now to protect it from the Foswiki startup
+    # process, which will attempt to suck it dry.
+    # Note from Apache docs:
+    #
+    # "The $r->content method will return the entity body read
+    #  from the client, but only if the request content type is
+    #  application/x-www-form-urlencoded."
+    #
+    # Can't use $r->content() because the content type is text/xml, not
+    # application/x-www-form-urlencoded
+    my $content = '';
+    my $length = $request->headers_in->get('Content-Length');
+    if ( $length ) {
+	my $read = $request->read( $content, $length );
+	# Die so we don't upload zero-sized content
+	die "Failed to read request body" if !$read;
+    }
+    
     # Local for thread safety
     local $filesys   = $this->_getFilesys( $uri, $request );
     local $outdoc    = undef;
@@ -125,22 +143,6 @@ sub _process {
     my $status = DECLINED;
 
     if ( $this->can($method) ) {
-
-        # Protect the request body from TWiki, which wipes it when it is
-        # initialised during login (I think it's actually a CGI problem,
-        # but in our tests it only manifests with TWiki)
-        my $content;
-        my $length = $request->headers_in->get('Content-Length');
-        if ( defined $length ) {
-            if ( $length > 0 ) {
-                my $read = $request->read( $content, $length );
-                $this->_trace( 2, 'DAV:', $method,
-                    "has contents; read $read of $length" );
-            }
-            else {
-                $content = '';
-            }
-        }
 
         # Don't auth OPTIONS or M$ Office won't be able to talk to us (it
         # doesn't send auth headers with OPTIONS)
@@ -173,9 +175,6 @@ sub _process {
 sub PROPPATCH {
     my ( $this, $request, $content ) = @_;
     my $path = Encode::decode_utf8( $request->uri() );
-
-    # Don't need the content, unless for debug
-    #my $content = $this->_getContent($request);
 
     if ( $this->_isLockNullResource( $request, $path ) ) {
         $this->_trace( 1, 'Lock-null' );
@@ -901,12 +900,15 @@ sub PUT {
     binmode $fh;
     print $fh $content;
 
-    if ( $filesys->close_write($fh) ) {
-        return HTTP_FORBIDDEN;
+    my $retVal = $filesys->close_write($fh);
+    if ( $retVal eq 0 ) {
+        $request->status(HTTP_CREATED);
+        return OK;
+    } elsif ( $retVal eq 1 ) {
+        return HTTP_BAD_REQUEST;
     }
 
-    $request->status(HTTP_CREATED);
-    return OK;
+    return HTTP_FORBIDDEN;
 }
 
 sub LOCK {
@@ -1602,32 +1604,6 @@ sub _xml_fill_live_prop {
     }
 }
 
-# Note from Apache docs:
-#
-# "The $r->content method will return the entity body read from the client,
-#  but only if the request content type is application/x-www-form-urlencoded."
-#
-# Can't use $r->content() because the content type is text/xml, not
-# application/x-www-form-urlencoded
-sub _getContent {
-    my ( $this, $request ) = @_;
-
-    my $content;
-    my $length = $request->headers_in->get('Content-Length');
-    my $read   = 0;
-    if ( $length && $length > 0 ) {
-        $read = $request->read( $content, $length );
-    }
-    else {
-
-        # Requests from Web Folders are malformed
-        my $offset = 0;
-        while ( $request->read( $content, 1024, $offset ) == 1024 ) {
-            $offset += 1024;
-        }
-    }
-    return $content;
-}
 
 # Based on the requested path, figure out which Filesys::Virtual module
 # will handle the request.
