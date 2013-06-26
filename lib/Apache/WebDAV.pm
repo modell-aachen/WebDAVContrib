@@ -73,10 +73,12 @@ sub _XMLParser {
 # Constructor
 sub new {
     my ( $class, $trace ) = @_;
+    
     return bless(
         {
             trace => $trace || 0,
-            mimeTypes => undef
+            mimeTypes => undef,
+            useKVP => 0
         },
         $class
     );
@@ -130,9 +132,9 @@ sub _process {
     my $content = '';
     my $length = $request->headers_in->get('Content-Length');
     if ( $length ) {
-	my $read = $request->read( $content, $length );
-	# Die so we don't upload zero-sized content
-	die "Failed to read request body" if !$read;
+        my $read = $request->read( $content, $length );
+        # Die so we don't upload zero-sized content
+        die "Failed to read request body" if !$read;
     }
     
     # Local for thread safety
@@ -159,6 +161,32 @@ sub _process {
                 $request->headers_in->get('X-Litmus'),
                 $request->headers_in->get('X-Litmus-Second')
             );
+            
+            # KVP
+            eval {
+                my $session = $filesys->_initSession;
+                my $web = $session->{webName};
+                my $topic = $session->{topicName};
+                my $talkSuffix = $Foswiki::cfg{Extensions}{KVPPlugin}{suffix} || "TALK";
+                unless ( $topic =~ /^(.+)$talkSuffix$/) {
+                    require Foswiki::Plugins::KVPPlugin;
+                    my $kvp = Foswiki::Plugins::KVPPlugin::_initTOPIC( $web, $topic );
+                    if ( defined $kvp ) {
+                        my $canAttach = $kvp->canAttach;
+                        my $canEdit = $kvp->canEdit;
+                        my $canMove = $kvp->canMove;
+                        
+                        $this->{canEdit} = $canEdit;
+                        $this->{canAttach} = $canAttach;
+                        $this->{canMove} = $canMove;
+                        $this->{useKVP} = 1;    
+                    }
+                }
+            };
+            if ( $@ ) {
+                
+            }
+                        
             $status = $this->$method( $request, $content );
             $this->_trace( 2, 'DAV:',
                 '<-' . ( $status == 0 ? 'ok' : $status ) . '-',
@@ -168,7 +196,7 @@ sub _process {
             $status = HTTP_UNAUTHORIZED;
         }
     }
-
+    
     return $status;
 }
 
@@ -397,6 +425,14 @@ sub COPY {
 
 sub DELETE {
     my ( $this, $request ) = @_;
+    
+    if ( $this->{useKVP} ) {
+        unless ( $this->{canEdit} ) {
+            $this->_trace( 1, "DELETE denied by KVP." );
+            return HTTP_FORBIDDEN;
+        }
+    }
+    
     my $path = Encode::decode_utf8( $request->uri() );
 
     unless ( $filesys->test( 'e', $path ) ) {
@@ -871,6 +907,13 @@ sub PROPFIND {
 sub PUT {
     my ( $this, $request, $content ) = @_;
 
+    if ( $this->{useKVP} ) {
+        unless ( $this->{canAttach} ) {
+            $this->_trace( 1, "PUT denied by KVP." );
+            return HTTP_FORBIDDEN;
+        }
+    }
+    
     my $path = Encode::decode_utf8( $request->uri() );
 
     # Check the locks
@@ -913,6 +956,14 @@ sub PUT {
 
 sub LOCK {
     my ( $this, $request, $content ) = @_;
+    
+    if ( $this->{useKVP} ) {
+        unless ( $this->{canEdit} ) {
+            $this->_trace( 1, "LOCK denied by KVP." );
+            return HTTP_FORBIDDEN;
+        }
+    }
+    
     my $path = Encode::decode_utf8( $request->uri() );
 
     return DECLINED unless ( $filesys->can('add_lock') );
