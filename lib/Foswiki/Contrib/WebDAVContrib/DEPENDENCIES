@@ -1,0 +1,17 @@
+APR::Table,>=0,1,perl,Required, part of Apache mod_perl
+APR::UUID,>=0,1,cpan,May be required for lib/Apache/WebDAV.pm
+Apache2::Access,>=0,1,cpan,May be required for lib/Apache/WebDAV.pm
+Apache2::Const,>=0,1,perl,Required, part of Apache mod_perl
+Apache2::Module,>=0,1,cpan,May be required for lib/Apache/FoswikiDAVHandler.pm
+Apache2::RequestIO,>=0,1,perl,Required, part of Apache mod_perl
+Apache2::RequestRec,>=0,1,perl,Required, part of Apache mod_perl
+Data::Dumper,>=0,1,cpan,May be required for lib/Apache/WebDAV.pm
+Encode,>=0,1,cpan,May be required for lib/Apache/WebDAV.pm
+File::Find::Rule::Filesys::Virtual,>=0,1,cpan,Required
+File::Spec,>=0,1,cpan,Required, standard perl module
+Foswiki::Plugins::FilesysVirtualPlugin,>=1,1,perl,Required
+POSIX,>=0,1,cpan,May be required for lib/Apache/WebDAV.pm
+URI,>=0,1,cpan,Required, standard perl module
+URI::Escape,>=0,1,cpan,May be required for lib/Apache/WebDAV.pm
+XML::LibXML,>=1.64,1,cpan,Required, standard perl module
+XML::Simple,>=0,1,cpan,May be required for lib/Apache/WebDAV.pm

@@ -1,0 +1,6 @@
+data/System/WebDAVContrib.txt 0644 Documentation
+lib/Foswiki/Contrib/WebDAVContrib.pm 0644 Package module
+lib/Apache/WebDAV.pm 0644 Apache handler
+lib/Apache/FoswikiDAVHandler.pm 0644 Interface to apache
+pub/System/WebDAVContrib/wikiringlogo20x20.png 0644 Graphic
+pub/System/WebDAVContrib/vhost.conf 0644

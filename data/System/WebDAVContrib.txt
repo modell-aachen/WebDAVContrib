@@ -1,0 +1,359 @@
+%META:TOPICINFO{author="ProjectContributor" date="1290609391" format="1.1" version="1"}%
+---+!! !WebDAVContrib
+<!--
+One line description, required for extensions repository catalog.
+   * Set SHORTDESCRIPTION = Apache2 !WebDAV module for Foswiki
+-->
+%SHORTDESCRIPTION%
+
+%TOC%
+
+[[http://webdav.org][WebDAV]] stands for "Web-based Distributed Authoring and
+Versioning". It is a set of extensions to the HTTP protocol which allows users
+to collaboratively edit and manage files on remote web servers. 
+
+This module contains a full Class 2 !WebDAV implementation for Apache 2
+=mod_perl=. It uses a standard abstraction of the server filesystem,
+allowing it to be used with a wide range of different filesystems,
+including (via the FilesysVirtualPlugin) the Foswiki datastore.
+
+Integration with <nop>Web<nop>DAV means that users can edit topics and
+attachments using an appropriate <nop>Web<nop>DAV enabled client program,
+such as Microsoft Office, Internet Explorer, Open Office, etc. When used
+with the companion WebDAVLinkPlugin, you can embed links to !WebDAV
+resources in Foswiki pages that will open the linked documents in
+native applications.
+
+!Foswiki permissions are honoured throughout.
+
+Use of the FilesysVirtualPlugin means that all the data views supported by
+that module are available to !WebDAV clients, so clients can read and write
+Foswiki topics as text, as HTML, as a JSON data structure, or as any other
+view supported by FilesysVirtualPlugin.
+
+(Note: This module is a completely new implementation for Apache 2, and
+does not share _any_ code with the old !WebDAVPlugin).
+
+---++ Developer notes
+
+---++ Installation Instructions
+
+You do not need to install anything in the browser to use this extension. The following instructions are for the administrator who installs the extension on the server.
+
+Open configure, and open the "Extensions" section. Use "Find More Extensions" to get a list of available extensions. Select "Install".
+
+If you have any problems, or if the extension isn't available in =configure=, then you can still install manually from the command-line. See http://foswiki.org/Support/ManuallyInstallingExtensions for more help.
+
+<!--
+   * Set CONFHOST = %URLPARAM{"confhosth" default="%HTTP_HOST%"}%
+   * Set CONFPATH = %URLPARAM{"confpath" default="/var/www/wiki"}%
+   * Set CONFURL = %URLPARAM{"confurl" default="/dav"}%
+-->
+---++ Configuration Wizard
+Configuring <nop>%TOPIC% for use with Foswiki.
+---+++ Step 1: basic settings
+<div class="foswikiFormSteps">
+  <form name="config" action="%SCRIPTURLPATH{view}%/%WEB%/%TOPIC%#InstaInstr">
+  <div class="foswikiFormStep">
+    <h3>Foswiki server host:</h3>
+    <input class="foswikiInputField" type="text" name="confhost" size="80" value="%CONFHOST%" />
+    <div class="foswikiFormDescription">Enter the server host name.</div>
+  </div>
+  <div class="foswikiFormStep">
+    <h3>URL path:</h3>
+    <input class="foswikiInputField" type="text" name="confurl" size="80" value="%CONFURL%" />
+    <div class="foswikiFormDescription">Enter the required URL path to the DAV resources.</div>
+  </div>
+  <div class="foswikiFormStep">
+    <h3>Installation directory:</h3>
+    <input class="foswikiInputField" type="text" name="confpath" size="80" value="%CONFPATH%" />
+    <div class="foswikiFormDescription">Enter the directory path to your Foswiki installation on the server.</div>
+  </div>
+  <div class="foswikiFormStep foswikiFormLast foswikiFormButtons">
+    <input class="foswikiSubmit" type="submit" value="Submit" />
+    <div class="foswikiFormDescription">
+      Clicking on Submit will rewrite the installation
+      instructions below.
+    </div>
+  </div>
+  </form>
+</div>
+
+#InstaInstr
+---+++ Step 2: mod_perl configuration
+
+Create the file =%CONFPATH%/tools/WebDAVContrib_mod_perl_startup.pl= with the
+following content:
+
+<pre>
+use lib '%CONFPATH%/bin';
+do 'setlib.cfg';
+1;
+</pre>
+
+This tells !WebDAVContrib where you want to run Foswiki from.
+
+---+++ Step 3: Apache configuration 
+
+Add the following to your Apache configuration (must be included into the
+base configuration; will *not* work in =.htaccess=)
+
+This exposes the  =%CONFURL%= path on your server. You can change this location
+to whatever you want, but make sure the =FoswikiLocation= matches it.
+
+<pre>
+PerlRequire "%CONFPATH%/tools/WebDAVContrib_mod_perl_startup.pl"
+PerlLoadModule Apache::FoswikiDAVHandler
+&lt;Location "%CONFURL%">
+    SetHandler perl-script
+    FoswikiLocation "%CONFURL%"
+    FoswikiFilesysHandler Filesys::Virtual::Foswiki
+    PerlHandler Apache::FoswikiDAVHandler
+&lt;/Location>
+</pre>
+This will configure DAV *without authentication*, so all transactions will use
+the "guest" login. See "Configuring authentication" below for information
+on configuring web server authentication.
+
+Restart your apache server. 
+
+---+++ Step 5: Test
+
+The path http://%CONFHOST%%CONFURL% should now show you all your root
+webs, when viewed from a DAV-enabled client.
+
+The best way to verify your server is working is to use a simple, reliable
+!WebDAV client program such as =cadaver= (available for most platforms
+- you can get a Windows version from
+http://www.phtagr.org/2009/04/01/cadaver-for-windows/ **).
+
+Run =cadaver= and open the DAV folder on the server:
+<pre>
+dav:!> open http://%CONFHOST%%CONFURL%
+dav:%CONFURL%/> ls
+Listing collection `%CONFURL%/': succeeded.
+Coll:   Main                                4096  Mar 25 12:42
+Coll:   Sandbox                             4096  Apr  6 08:19
+Coll:   System                             20480  Apr  7 10:32
+...
+dav:%CONFURL%/> cd Sandbox
+dav:%CONFURL%/> put packages.txt LoremIpsum.txt
+Progress: [===================>] 100.0% of 320 bytes succeeded
+dav:%CONFURL%/> cat LoremIpsum.txt
+Displaying `/dav/Sandbox/LoremIpsum.txt':
+Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do
+eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut
+enim ad minim veniam, quis nostrud exercitation ullamco laboris
+nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor
+in reprehenderit in voluptate velit esse cillum dolore eu fugiat
+nulla pariatur. Excepteur sint occaecat cupidatat non proident,
+sunt in culpa qui officia deserunt mollit anim id est laborum....
+dav:%CONFURL%/> cd LoremIpsum_files
+dav:%CONFURL%/> put muspimerol.gif
+Progress: [===================>] 100.0% of 2800 bytes succeeded
+dav:%CONFURL%/> ls
+Listing collection `/%CONFURL%/Sandbox/LoremIpsum_files/': succeeded.
+        muspimerol.gif                  2800  Apr 12 14:38
+</pre>
+If cadaver reports any errors, check your apache error log on the server.
+
+You can verify that the !LoremIpsum topic has been created by going to %SCRIPTURL{view}%/Sandbox/LoremIpsum.
+
+=user="BaseUserMapping_666"= shows that the creation of the !LoremIpsum topic and the subsequent uploading of the =muspimerol.gif= attachment was done using the !WikiGuest user. If you try to do the same in the System directory, you will get a failure response:
+<pre>
+dav:!> open http://%CONFHOST%%CONFURL%
+dav:%CONFURL%/> cd Sandbox
+dav:%CONFURL%/> put packages.txt LoremIpsum.txt
+Uploading packages.txt to `/dav/System/LoremIpsum.txt':
+Progress: [=============================>] 100.0% of 320 bytes failed:
+401 Authorization Required
+</pre>
+
+(At this point attempting to access the !WebFolder using Windows XP service pack 2 allows you to browse the folders, but opening any files will fail)
+
+---+++ Step 6: Configuring authentication
+
+If you configured your server as described above, it will be configured *without* authentication. That means that all transactions will happen as the "guest" user. In most cases you will want to require a login by the client, so that the user can be identified.
+
+To configure authentication you simply protect the folder using
+an _Apache_ authentication method of choice. !WebDAVContrib will automatically
+log in to Foswiki using the username (or Wiki Name) that was used to log in
+to Apache.
+
+For example, you could use Basic Authentication to protect the DAV folder,
+using the password file used by the default Foswiki setup:
+<pre>
+PerlRequire "%CONFPATH%/tools/WebDAVContrib_mod_perl_startup.pl"
+PerlLoadModule Apache::FoswikiDAVHandler
+&lt;Location "%CONFURL%">
+    SetHandler perl-script
+    FoswikiLocation "%CONFURL%"
+    FoswikiFilesysHandler Filesys::Virtual::Foswiki
+    FoswikiDebug 0
+    PerlHandler Apache::FoswikiDAVHandler
+    %RED%AuthName "Foswiki"
+    AuthUserFile %CONFPATH%/data/.htpasswd
+    AuthType Basic
+    &lt;LimitExcept OPTIONS&gt;
+        require valid-user
+    &lt;/LimitExcept&gt;%ENDCOLOR%
+&lt;/Location>
+</pre>
+Restart the web server after any change to the Apache configuration.
+
+<pre>
+
+C:\Documents and Settings\Administrator\Desktop\cadaver>cadaver.bat
+dav:!> open http://%CONFHOST%%CONFURL%
+Authentication required for Foswiki on server `%CONFHOST%':
+Username: BillGates
+Password:
+dav:%CONFURL%/> ls
+Listing collection `/%CONFURL%/': succeeded.
+Coll:   Main                                4096  Feb 24 07:14
+Coll:   Sandbox                             4096  Apr 10 00:51
+Coll:   System                             24576  Apr  9 09:01
+...
+</pre>
+
+Note that Basic Authentication is much more secure if used over
+SSL (with https: URLs).
+
+---+++ Step 7: Configuring FilesysVirtualPlugin
+Refer to the documentation for FilesysVirtualPlugin for information on
+configuring it to support different data views. Each data view presents
+topics as a different file type, allowing you to read and write the same
+topic in a range of different formats.
+
+---++ Debugging
+
+If you are having problems with !WebDAV you can enable tracing in the Apache
+handler and the file system interface using the =FoswikiDebug= Apache
+directive. Set this to:
+
+   * 0 to disable tracing,
+   * 1 to enable tracing in the filesystem (shows reason for failures)
+   * 2 to enable tracing of !WebDAV requests.
+   * 4 to enable detailed debugging
+
+Trace information is output to the Apache error log. Note that the tracing
+options are bits in a mask and can be combined.
+
+---++ Linking to DAV resources from a web browser
+To link to a DAV resource from a web browser, all you have to do is link to
+the DAV url of the resource. However most browsers will open the link
+in a "read only" mode. If you want to open DAV resources from Firefox
+or Internet Explorer for editing using a DAV-aware native application
+(such as Microsoft Word or Open Office) you can use the companion
+WebDAVLinkPlugin.
+
+---++ Accessing a <nop>WebDAV resource on Microsoft Windows
+
+There are four ways to access !WebDAV folders from Windows:
+   1 (Preferred) Use the *Add Network Place* wizard. Enter the URL of the folder e.g.
+     <pre>http://%CONFHOST%%CONFURL%</pre>
+   1 Mount a !WebDAV folder on a drive letter from the command-line 
+     (a DOS box). <pre>
+C:\> net use * http://%CONFHOST%%CONFURL%
+Drive Z: is now connected to <nop>http://%CONFHOST%%CONFURL%.</pre>
+   1 Via Internet Explorer (IE 7 or earlier), by following the File->Open menu and selecting
+     "Open as Web Folder". Enter the URL of the folder e.g.
+     <pre>http://%CONFHOST%%CONFURL% </pre>
+   1 Directly from an application, such as Microsoft Office. Type the full URL
+     path to the document e.g.
+     <pre>http://%CONFHOST%%CONFURL%/System/AccessControl.txt</pre>
+Note that the DAV support on Windows is somewhat inconsistent. Some of the
+above methods may not work on some versions of Windows, or when using SSL,
+or with some types of authentication. These problems are not unique
+to this !WebDAV implementation; the bugs are in the client, not the server.
+
+   * For example, using !WindowsXP service pack 2, "Open as web folder" results in a standard windows share style authentication dialog which fails (doesn't even send a request to the DAV server), and then when you hit cancel, a different login dialog pops up - entering your Foswiki username and password here _works_
+
+See http://greenbytes.de/tech/webdav/webdav-redirector-list.html and
+http://greenbytes.de/tech/webdav/webfolder-client-list.htmlfor a list
+list of the known bugs in different Windows versions. 
+
+Don't forget to restart Apache :)
+
+---+++ Web Folders
+
+Note that only the !WebDAV Mini-Redirector has been tested with this plugin. If
+you are using an older version of Windows you may find that it attempts to use
+the _other_ Windows !WebDAV client. Look at your Apache access log and look for
+the user-agent _Microsoft Data Access Internet Publishing Provider DAV_. If you
+see it then Windows is trying to use the old Web Folders implementation of
+!WebDAV.
+
+---+++ Problems with authentication
+
+By default the Mini-Redirector will not talk to Basic authentication. This is
+because Basic Authentication is very insecure over a plain connection. If your
+server uses SSL, or you are behind a corporate firewall, you may consider it
+safe to enable it by following the instructions at
+http://support.microsoft.com/kb/841215
+
+Windows caches authentication aggressively. This is usually not a problem
+unless you try and change authentication method, in which case rebooting
+Windows usually works, though you may have to explicitly clear your caches as
+well.
+
+If a single folder is mounted on a server using DAV, the !WebDAV Mini-Redirector
+assumes that the root folder on the same server is also mounted using DAV, and
+will try to apply the same cached authentication to all sub-folders; so having
+two sub-folders on the same server with different authentication schemes won't
+work. This applies to all folders mounted via !WebDAV from a single server.
+
+If you want to use Digest authentication, you will have to log in with an NTLM
+domain name (e.g. =CORPORATE\myname=). The NTLM domain string is required in
+the server password file (so Foswiki user =myname= needs to be in the digest
+file as =CORPORATE\myname=).
+
+---+++ Problems with Microsoft Office
+
+Office uses the mini-redirector to access files stored in !WebDAV.
+
+After opening a !WebDAV document in Office, you may see the message "Contacting
+the server for information. Press ESC to cancel." in the application status
+line. Office does not attempt to open any connections to the !WebDAV server
+after an initial PROPFIND. Clicking ESC results in the message "Downloading
+..." which again does not open any connections. Eventually after some minutes
+the application may display the document, with no further communication to the
+!WebDAV server. Research on Google suggests that this is a bug with the printer
+driver in Office.
+
+If the server does not support authentication, Office will always open
+documents in "read-only" mode.
+
+---++ Technical notes
+
+All the standard [[http://www.webdav.org/neon/litmus/][Litmus tests]] pass
+except locks:18 and locks:22. Note: the Litmus tests have to run with
+=Filesys::Virtual::PlainPlusAttrs= due to the heterogenous way that Foswiki
+handles web, topic and attachment resources (Web<nop>DAV assumes only two
+resource types, collections and files).
+
+---++ License
+
+This software is released under the GNU Public License, version 2. However it
+cost a lot in blood, sweat and tears to develop, and you are respectfully
+requested to purchase a support contract (available from
+http://kontextwork.de). By doing so you not only gain direct access to the
+support of the most experienced Foswiki developers working on the project, but
+you are also helping to make the further development of open-source Foswiki
+possible. 
+
+---++ Info
+Another great Foswiki extension from the <a style="text-decoration:none" href="http://wikiring.com"><img src="%ATTACHURLPATH%/wikiringlogo20x20.png" alt="" /> *WikiRing* </a> - working together to improve your wiki experience!
+
+Many thanks to the following sponsors for supporting this work:
+   * [[http://Kontextwork.de][KontextWork]]
+
+|  Author(s): | Crawford Currie http://c-dot.co.uk |
+|  Copyright: | &copy; 2008 !KontextWork.de, &copy; 2008-2010 Crawford Currie http://c-dot.co.uk |
+|  License: | [[http://www.gnu.org/licenses/old-licenses/gpl-2.0.html][GPL2 (Gnu General Public License v2)]] |
+|  Release: | /jidQrcaozxnxTDSHEh3qA |
+|  Version: | 1.0.3 |
+|  Change History: | <!-- versions below in reverse order -->&nbsp; |
+|  Dependencies: | <table class="foswikiTable" border="1"><tr><th>Name</th><th>Version</th><th>Description</th></tr><tr><td align="left">APR::Table</td><td align="left">&gt;=0</td><td align="left">Required, part of Apache mod_perl</td></tr><tr><td align="left">APR::UUID</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">Apache2::Access</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">Apache2::Const</td><td align="left">&gt;=0</td><td align="left">Required, part of Apache mod_perl</td></tr><tr><td align="left">Apache2::Module</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/FoswikiDAVHandler.pm</td></tr><tr><td align="left">Apache2::RequestIO</td><td align="left">&gt;=0</td><td align="left">Required, part of Apache mod_perl</td></tr><tr><td align="left">Apache2::RequestRec</td><td align="left">&gt;=0</td><td align="left">Required, part of Apache mod_perl</td></tr><tr><td align="left">Data::Dumper</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">Encode</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">File::Find::Rule::Filesys::Virtual</td><td align="left">&gt;=0</td><td align="left">Required</td></tr><tr><td align="left">File::Spec</td><td align="left">&gt;=0</td><td align="left">Required, standard perl module</td></tr><tr><td align="left">Foswiki::Plugins::FilesysVirtualPlugin</td><td align="left">&gt;=1</td><td align="left">Required</td></tr><tr><td align="left">POSIX</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">URI</td><td align="left">&gt;=0</td><td align="left">Required, standard perl module</td></tr><tr><td align="left">URI::Escape</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr><tr><td align="left">XML::LibXML</td><td align="left">&gt;=1.64</td><td align="left">Required, standard perl module</td></tr><tr><td align="left">XML::Simple</td><td align="left">&gt;=0</td><td align="left">May be required for lib/Apache/WebDAV.pm</td></tr></table> |
+
+<!-- Do _not_ attempt to edit this topic; it is auto-generated. Please add comments/questions/remarks to the feedback topic on foswiki.org instead. -->
