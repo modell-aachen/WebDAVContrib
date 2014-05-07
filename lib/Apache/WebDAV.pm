@@ -73,7 +73,7 @@ sub _XMLParser {
 # Constructor
 sub new {
     my ( $class, $trace ) = @_;
-    
+
     return bless(
         {
             trace => $trace || 0,
@@ -136,7 +136,7 @@ sub _process {
         # Die so we don't upload zero-sized content
         die "Failed to read request body" if !$read;
     }
-    
+
     # Local for thread safety
     local $filesys   = $this->_getFilesys( $uri, $request );
     local $outdoc    = undef;
@@ -161,7 +161,7 @@ sub _process {
                 $request->headers_in->get('X-Litmus'),
                 $request->headers_in->get('X-Litmus-Second')
             );
-            
+
             # KVP
             eval {
                 my $session = $filesys->_initSession;
@@ -175,18 +175,18 @@ sub _process {
                         my $canAttach = $kvp->canAttach;
                         my $canEdit = $kvp->canEdit;
                         my $canMove = $kvp->canMove;
-                        
+
                         $this->{canEdit} = $canEdit;
                         $this->{canAttach} = $canAttach;
                         $this->{canMove} = $canMove;
-                        $this->{useKVP} = 1;    
+                        $this->{useKVP} = 1;
                     }
                 }
             };
             if ( $@ ) {
-                
+
             }
-                        
+
             $status = $this->$method( $request, $content );
             $this->_trace( 2, 'DAV:',
                 '<-' . ( $status == 0 ? 'ok' : $status ) . '-',
@@ -196,7 +196,7 @@ sub _process {
             $status = HTTP_UNAUTHORIZED;
         }
     }
-    
+
     return $status;
 }
 
@@ -425,14 +425,14 @@ sub COPY {
 
 sub DELETE {
     my ( $this, $request ) = @_;
-    
+
     if ( $this->{useKVP} ) {
         unless ( $this->{canEdit} ) {
             $this->_trace( 1, "DELETE denied by KVP." );
             return HTTP_FORBIDDEN;
         }
     }
-    
+
     my $path = Encode::decode_utf8( $request->uri() );
 
     unless ( $filesys->test( 'e', $path ) ) {
@@ -913,7 +913,7 @@ sub PUT {
             return HTTP_FORBIDDEN;
         }
     }
-    
+
     my $path = Encode::decode_utf8( $request->uri() );
 
     # Check the locks
@@ -956,14 +956,14 @@ sub PUT {
 
 sub LOCK {
     my ( $this, $request, $content ) = @_;
-    
+
     if ( $this->{useKVP} ) {
         unless ( $this->{canEdit} ) {
             $this->_trace( 1, "LOCK denied by KVP." );
             return HTTP_FORBIDDEN;
         }
     }
-    
+
     my $path = Encode::decode_utf8( $request->uri() );
 
     return DECLINED unless ( $filesys->can('add_lock') );
@@ -1057,10 +1057,10 @@ sub LOCK {
                 #$lockstat{owner} =~ s/<D:href>(.*)\\\\(.*)<\/D:href>/$1/;
                 #print STDERR "BRAT--------------".$lockstat{owner}."\n";
 
-		# meyer@modell-aachen.de:
-		# According to RFC3744 - 5.1.1 - just remove the href tag.
+                # meyer@modell-aachen.de:
+                # According to RFC3744 - 5.1.1 - just remove the href tag.
                 my $lockowner = $brat->toString();
-		$lockowner =~ s/<D:href>(.*)\\(.*)<\/D:href>/$2/;
+                $lockowner =~ s/<D:href>(.*)\\(.*)<\/D:href>/$2/;
                 $lockstat{owner} = $lockowner;
                 next;
             }
@@ -1151,19 +1151,19 @@ sub UNLOCK {
 
     my $path = Encode::decode_utf8( $request->uri() );
     my $locktoken = $request->headers_in->get('Lock-Token');
-    
+
     # meyer@modell-aachen.de
     # see below
     unless ( $locktoken ) {
         $this->_trace( 1, 'No locktoken given', $path );
         return HTTP_FORBIDDEN;
     }
-    
+
     $locktoken =~ s/<(.*)>/$1/;
 
     # meyer@modell-aachen.de
     # Fix:
-    # Returning a 403 although there is no lock for the given token 
+    # Returning a 403 although there is no lock for the given token
     # will prevent MS Office from sending a proper lockinfo request.
     # (Office keeps its token until the according lock is released)
     my $hasLock = $filesys->has_lock( $locktoken );
@@ -1246,13 +1246,13 @@ sub _clientIsMSOffice {
     my ( $this, $request ) = @_;
     # Office < 2013
     my $isCoreStorage = $request->headers_in->get('User-Agent') =~ /Microsoft Office Core Storage Infrastructure/;
-    
+
     # Office 2013
     # UAs: Microsoft Office Upload Center 2013 (15.0.4420) Windows NT 6.1
     #      Microsoft Office Word 2013 (15.0.4420) Windows NT 6.1
     #      ...
     my $isOffice2013 = $request->headers_in->get('User-Agent') =~ /Microsoft Office(.+)2013/;
-    
+
     return ($isCoreStorage || $isOffice2013);
 }
 
@@ -1707,6 +1707,11 @@ sub _processAuth {
 
             # using the apache user
             my $loginName = $request->user();
+            unless ( $loginName ) {
+                # _emitBody( "ERROR: (401) Invalid login.", $request );
+                $request->status(HTTP_UNAUTHORIZED);
+                return 0;
+            }
 
             # Windows insists on sticking the domain in front of the the
             # username. Chop it off if the mini-redirector is requesting.
@@ -1714,9 +1719,9 @@ sub _processAuth {
 
             # meyer@modell-aachen.de
             if ( !$Foswiki::cfg{WebDAVContrib}{KeepWindowsDomain} ) {
-              if ( $loginName =~ m/^(.+)\@.*$/ || $loginName =~ m/^.*\\(.+)$/ ) {
+              if ( $loginName && ($loginName =~ m/^(.+)\@.*$/ || $loginName =~ m/^.*\\(.+)$/) ) {
                 $loginName = $1;
-              }  
+              }
             }
 
             # meyer@modell-aachen.de
@@ -1724,7 +1729,7 @@ sub _processAuth {
             if ( $Foswiki::cfg{Ldap}{NormalizeLoginNames} ) {
               require Foswiki::Contrib::LdapContrib;
               $loginName = Foswiki::Contrib::LdapContrib::transliterate( $loginName );
-              $loginName = "\L$loginName"
+              $loginName = "\L$loginName";
             }
 
             unless ( $filesys->login($loginName) ) {
@@ -1829,6 +1834,6 @@ support from the authors (available from webdav@c-dot.co.uk). By working
 with us you not only gain direct access to the support of some of the
 most experienced Foswiki developers working on the project, but you are
 also helping to make the further development of open-source Foswiki
-possible. 
+possible.
 
 Author: Crawford Currie http://c-dot.co.uk
