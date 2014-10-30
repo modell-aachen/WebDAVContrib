@@ -145,64 +145,78 @@ sub _process {
     my $status = DECLINED;
 
     if ( $this->can($method) ) {
+        # Trace Litmus special headers for debug
+        $this->_trace(
+            2, 'DAV:', $method, $request->uri(),
+            $request->headers_in->get('X-Litmus'),
+            $request->headers_in->get('X-Litmus-Second')
+        );
 
-        # Don't auth OPTIONS or M$ Office won't be able to talk to us (it
-        # doesn't send auth headers with OPTIONS)
+        # KVP
+        eval {
+            my $session = $filesys->_initSession;
+            my $web = $session->{webName};
+            my $topic = $session->{topicName};
+            my $talkSuffix = $Foswiki::cfg{Extensions}{KVPPlugin}{suffix} || "TALK";
+            unless ( $topic =~ /^(.+)$talkSuffix$/) {
+                require Foswiki::Plugins::KVPPlugin;
+                my $kvp = Foswiki::Plugins::KVPPlugin::_initTOPIC( $web, $topic );
+                if ( defined $kvp ) {
+                    my $canAttach = $kvp->canAttach;
+                    my $canEdit = $kvp->canEdit;
+                    my $canMove = $kvp->canMove;
 
-        # meyer@modell-aachen.de:
-        # I don't know why but sometimes MS Office doesn't send an authorization header
-        # for an UNLOCK request. So we don't authenticate that request and relay on the lock-token.
-        # SMELL: Is this safe?
-        if ( $method eq 'OPTIONS' || $method eq 'UNLOCK' || $this->_processAuth($request) ) {
-
-            # Trace Litmus special headers for debug
-            $this->_trace(
-                2, 'DAV:', $method, $request->uri(),
-                $request->headers_in->get('X-Litmus'),
-                $request->headers_in->get('X-Litmus-Second')
-            );
-
-            # KVP
-            eval {
-                my $session = $filesys->_initSession;
-                my $web = $session->{webName};
-                my $topic = $session->{topicName};
-                my $talkSuffix = $Foswiki::cfg{Extensions}{KVPPlugin}{suffix} || "TALK";
-                unless ( $topic =~ /^(.+)$talkSuffix$/) {
-                    require Foswiki::Plugins::KVPPlugin;
-                    my $kvp = Foswiki::Plugins::KVPPlugin::_initTOPIC( $web, $topic );
-                    if ( defined $kvp ) {
-                        my $canAttach = $kvp->canAttach;
-                        my $canEdit = $kvp->canEdit;
-                        my $canMove = $kvp->canMove;
-
-                        $this->{canEdit} = $canEdit;
-                        $this->{canAttach} = $canAttach;
-                        $this->{canMove} = $canMove;
-                        $this->{useKVP} = 1;
-                    }
+                    $this->{canEdit} = $canEdit;
+                    $this->{canAttach} = $canAttach;
+                    $this->{canMove} = $canMove;
+                    $this->{useKVP} = 1;
                 }
-            };
-            if ( $@ ) {
-
             }
+        };
+        if ( $@ ) {}
 
-            $status = $this->$method( $request, $content );
-            $this->_trace( 2, 'DAV:',
-                '<-' . ( $status == 0 ? 'ok' : $status ) . '-',
-                $method, $request->uri() );
-        }
-        else {
-            $status = HTTP_UNAUTHORIZED;
-        }
+        $status = $this->$method( $request, $content );
+        $this->_trace( 2, 'DAV:',
+            '<-' . ( $status == 0 ? 'ok' : $status ) . '-',
+            $method, $request->uri() );
     }
 
     return $status;
 }
 
+sub _decodeUri {
+    my ( $this, $request ) = @_;
+
+    my $uri = $request->uri();
+    my $token = $1 if $uri =~ m/dav\/([^\/]+)/;
+    $uri =~ s/$token\/// if ( $token );
+    my $path = Encode::decode_utf8( $uri );
+    return ($path, $token);
+}
+
+sub _authToken {
+    my ( $this, $token) = @_;
+    return $filesys->_locks()->getAuthToken( $token );
+}
+
+sub _doAuth {
+    my ($this, $request, $path, $token) = @_;
+    my $auth = $this->_authToken($token);
+
+    return 0 unless ($auth && $auth->{user} && $auth->{path} && $auth->{file});
+    return 0 unless $this->_processAuth($request, $auth->{user});
+
+    my $authPath = $auth->{path} . '_files/' . $auth->{file};
+    return 0 unless $path =~ m/$authPath/;
+
+    return $auth;
+}
+
 sub PROPPATCH {
     my ( $this, $request, $content ) = @_;
-    my $path = Encode::decode_utf8( $request->uri() );
+
+    my ($path, $token) = $this->_decodeUri($request);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $path, $token);
 
     if ( $this->_isLockNullResource( $request, $path ) ) {
         $this->_trace( 1, 'Lock-null' );
@@ -280,7 +294,9 @@ sub PROPPATCH {
 
 sub COPY {
     my ( $this, $request ) = @_;
-    my $path = Encode::decode_utf8( $request->uri() );
+
+    my ($path, $token) = $this->_decodeUri($request);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $path, $token);
 
     if ( $this->_isLockNullResource( $request, $path ) ) {
         $this->_trace( 1, 'Lock-null' );
@@ -433,7 +449,8 @@ sub DELETE {
         }
     }
 
-    my $path = Encode::decode_utf8( $request->uri() );
+    my ($path, $token) = $this->_decodeUri($request);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $path, $token);
 
     unless ( $filesys->test( 'e', $path ) ) {
         $this->_trace( 1, 'Cannot find', $path );
@@ -501,7 +518,9 @@ sub DELETE {
 
 sub GET {
     my ( $this, $request ) = @_;
-    my $path = Encode::decode_utf8( $request->uri() );
+
+    my ($path, $token) = $this->_decodeUri($request);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $path, $token);
 
     if ( $this->_isLockNullResource( $request, $path ) ) {
         $this->_trace( 1, 'Lock-null' );
@@ -569,7 +588,9 @@ sub GET {
 
 sub HEAD {
     my ( $this, $request ) = @_;
-    my $path = Encode::decode_utf8( $request->uri() );
+
+    my ($path, $token) = $this->_decodeUri($request);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $path, $token);
 
     if ( !$filesys->test( 'e', $path ) ) {
         $this->_trace( 1, 'Does not exist', $path );
@@ -598,7 +619,9 @@ sub HEAD {
 
 sub MKCOL {
     my ( $this, $request, $content ) = @_;
-    my $path = Encode::decode_utf8( $request->uri() );
+    my ($path, $token) = $this->_decodeUri($request);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $path, $token);
+
     if ( $filesys->test( 'e', $path ) ) {
         $this->_trace( 1, 'Already exists', $path );
         return HTTP_METHOD_NOT_ALLOWED;
@@ -627,7 +650,8 @@ sub MKCOL {
 
 sub MOVE {
     my ( $this, $request ) = @_;
-    my $path = Encode::decode_utf8( $request->uri() );
+    my ($path, $token) = $this->_decodeUri($request);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $path, $token);
 
     if ( $this->_isLockNullResource( $request, $path ) ) {
         $this->_trace( 1, 'Lock-null', $path );
@@ -762,7 +786,8 @@ sub PROPFIND {
     my ( $this, $request, $content ) = @_;
 
     my $depth = ( $request->headers_in->get('Depth') || 0 );
-    my $uri = Encode::decode_utf8( $request->uri() );
+    my ($uri, $token) = $this->_decodeUri($request);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($uri, $token);
 
     # Make sure the resource exists
     if ( !$filesys->test( 'e', $uri ) ) {
@@ -914,7 +939,8 @@ sub PUT {
         }
     }
 
-    my $path = Encode::decode_utf8( $request->uri() );
+    my ($path, $token) = $this->_decodeUri($request);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $path, $token);
 
     # Check the locks
     my @errors = $this->_checkLocks( $request, 1, undef, $path );
@@ -964,7 +990,9 @@ sub LOCK {
         }
     }
 
-    my $path = Encode::decode_utf8( $request->uri() );
+    my ($path, $token) = $this->_decodeUri($request);
+    my $auth = $this->_doAuth($request, $path, $token);
+    return HTTP_UNAUTHORIZED unless $auth;
 
     return DECLINED unless ( $filesys->can('add_lock') );
 
@@ -1051,17 +1079,7 @@ sub LOCK {
                 next;
             }
             if ( $fn eq '{DAV:}owner' ) {
-                # $lockstat{owner} = $brat->toString();
-
-                #TODO: possible workaround for office 2010 LOCK payload
-                #$lockstat{owner} =~ s/<D:href>(.*)\\\\(.*)<\/D:href>/$1/;
-                #print STDERR "BRAT--------------".$lockstat{owner}."\n";
-
-                # meyer@modell-aachen.de:
-                # According to RFC3744 - 5.1.1 - just remove the href tag.
-                my $lockowner = $brat->toString();
-                $lockowner =~ s/<D:href>(.*)\\(.*)<\/D:href>/$2/;
-                $lockstat{owner} = $lockowner;
+                $lockstat{owner} = $auth->{user};
                 next;
             }
             if ( $li->nodeType == 1 ) {
@@ -1071,7 +1089,6 @@ sub LOCK {
         }
     }
     else {
-
         # Lock refresh
         $action = 'refresh';
     }
@@ -1149,7 +1166,9 @@ sub LOCK {
 sub UNLOCK {
     my ( $this, $request ) = @_;
 
-    my $path = Encode::decode_utf8( $request->uri() );
+    my ($path, $token) = $this->_decodeUri($request);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $path, $token);
+
     my $locktoken = $request->headers_in->get('Lock-Token');
 
     # meyer@modell-aachen.de
@@ -1169,6 +1188,8 @@ sub UNLOCK {
     my $hasLock = $filesys->has_lock( $locktoken );
     if ( $filesys->remove_lock($locktoken) || !$hasLock ) {
         $request->status( HTTP_NO_CONTENT );
+
+        $filesys->_locks()->removeAuthToken( $token );
         return OK;
     }
     $this->_trace( 1, 'Could not unlock', $path );
@@ -1696,57 +1717,22 @@ sub _getFilesys {
 # If the handler requires a login, pass the auth from the request on to it.
 # Only supports Basic auth ATM
 sub _processAuth {
-    my ( $this, $request ) = @_;
+    my ( $this, $request, $loginName ) = @_;
 
-    if ( $request->some_auth_required() ) {
-
-        # The current request is authenticated
-        if ( $filesys->can('login') ) {
-
-            # filesystem supports login
-
-            # using the apache user
-            my $loginName = $request->user();
-            unless ( $loginName ) {
-                # _emitBody( "ERROR: (401) Invalid login.", $request );
-                $request->status(HTTP_UNAUTHORIZED);
-                return 0;
-            }
-
-            # Windows insists on sticking the domain in front of the the
-            # username. Chop it off if the mini-redirector is requesting.
-            my $userAgent = $request->headers_in->get('User-Agent') || '';
-
-            # meyer@modell-aachen.de
-            if ( !$Foswiki::cfg{WebDAVContrib}{KeepWindowsDomain} ) {
-              if ( $loginName && ($loginName =~ m/^(.+)\@.*$/ || $loginName =~ m/^.*\\(.+)$/) ) {
-                $loginName = $1;
-              }
-            }
-
-            # meyer@modell-aachen.de
-            # normalize loginName by using LdapContrib and rewrite to lowercase.
-            if ( $Foswiki::cfg{Ldap}{NormalizeLoginNames} ) {
-              require Foswiki::Contrib::LdapContrib;
-              $loginName = Foswiki::Contrib::LdapContrib::transliterate( $loginName );
-              $loginName = "\L$loginName";
-            }
-
-            unless ( $filesys->login($loginName) ) {
-                $this->_trace( 1, 'Login failed for ' . $loginName );
-                # Login failed; reject the request
-                $request->content_type('text/html; charset="utf-8"');
-                _emitBody( "ERROR: (401) Can't login as $loginName", $request );
-                return 0;
-            }
-            $this->_trace( 2, $loginName . ' logged in' );
-        }
-        else {
-            print STDERR 'WebDAV: file system does not support auth';
-            _emitBody( "ERROR: (401) Can't login to filesystem", $request );
-            return 0;
-        }
+    unless ( $loginName ) {
+        $request->status(HTTP_UNAUTHORIZED);
+        return 0;
     }
+
+    unless ( $filesys->login($loginName) ) {
+        $this->_trace( 1, 'Login failed for ' . $loginName );
+        # Login failed; reject the request
+        $request->content_type('text/html; charset="utf-8"');
+        _emitBody( "ERROR: (401) Can't login as $loginName", $request );
+        return 0;
+    }
+    $this->_trace( 2, $loginName . ' logged in' );
+
     return 1;
 }
 
