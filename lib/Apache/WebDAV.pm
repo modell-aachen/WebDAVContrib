@@ -207,8 +207,9 @@ sub _doAuth {
     return 0 unless $this->_processAuth($request, $auth->{user});
 
     my $authPath = $auth->{path} . '_files/' . $auth->{file};
-    return 0 unless $path =~ m/$authPath/;
+    $authPath = Encode::decode_utf8( $authPath );
 
+    return 0 unless $path =~ m/$authPath/;
     return $auth;
 }
 
@@ -787,7 +788,7 @@ sub PROPFIND {
 
     my $depth = ( $request->headers_in->get('Depth') || 0 );
     my ($uri, $token) = $this->_decodeUri($request);
-    return HTTP_UNAUTHORIZED unless $this->_doAuth($uri, $token);
+    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $uri, $token);
 
     # Make sure the resource exists
     if ( !$filesys->test( 'e', $uri ) ) {
