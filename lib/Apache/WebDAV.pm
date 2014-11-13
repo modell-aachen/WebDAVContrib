@@ -72,13 +72,14 @@ sub _XMLParser {
 
 # Constructor
 sub new {
-    my ( $class, $trace ) = @_;
+    my ( $class, $trace, $location ) = @_;
 
     return bless(
         {
             trace => $trace || 0,
             mimeTypes => undef,
-            useKVP => 0
+            useKVP => 0,
+            location => $location || '/bin/dav'
         },
         $class
     );
@@ -188,7 +189,8 @@ sub _decodeUri {
     my ( $this, $request ) = @_;
 
     my $uri = $request->uri();
-    my $token = $1 if $uri =~ m/dav\/([^\/]+)/;
+    my $loc = $this->{location};
+    my $token = $1 if $uri =~ m/$loc\/([a-z0-9]+)/;
     $uri =~ s/$token\/// if ( $token );
     my $path = Encode::decode_utf8( $uri );
     return ($path, $token);
@@ -201,6 +203,8 @@ sub _authToken {
 
 sub _doAuth {
     my ($this, $request, $path, $token) = @_;
+
+    return 0 unless $token;
     my $auth = $this->_authToken($token);
 
     return 0 unless ($auth && $auth->{user} && $auth->{path} && $auth->{file});
@@ -788,7 +792,26 @@ sub PROPFIND {
 
     my $depth = ( $request->headers_in->get('Depth') || 0 );
     my ($uri, $token) = $this->_decodeUri($request);
-    return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $uri, $token);
+
+    my $authRequired = 1;
+    my $loc = $this->{location};
+    $authRequired = 0 if ( $uri =~ m/\/$/ || $uri =~ m/^$loc$/ );
+
+    if ( $authRequired ) {
+        my @parts = grep( !/^$/, split('/', $loc) );
+        my $pattern = '/';
+        foreach my $p (@parts) {
+            $pattern .= $p;
+            if ( $uri =~ m/^$pattern$/ ) {
+                $authRequired = 0;
+                last;
+            }
+        }
+    }
+
+    if ( $authRequired ) {
+        return HTTP_UNAUTHORIZED unless $this->_doAuth($request, $uri, $token);
+    }
 
     # Make sure the resource exists
     if ( !$filesys->test( 'e', $uri ) ) {

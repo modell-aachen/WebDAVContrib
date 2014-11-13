@@ -66,7 +66,7 @@ sub handler {
         my $dir_cfg = Apache2::Module::get_config( __PACKAGE__, $r->server,
             $r->per_dir_config );
 
-        $dav = new Apache::WebDAV( $dir_cfg->{FoswikiDebug} );
+        $dav = new Apache::WebDAV( $dir_cfg->{FoswikiDebug}, $dir_cfg->{FoswikiLocation} );
 
         my @handlers = (
             {
@@ -108,7 +108,7 @@ httpd.conf fragment for configuring test servers:
 
 PerlRequire "/var/www/foswiki/tools/WebDAVContrib_mod_perl_startup.pl"
 PerlLoadModule Apache::FoswikiDAVHandler
-# Foswiki DAV - 
+# Foswiki DAV -
 <Location "/fw_dav">
     AuthName "Foswiki"
     <IfDefine DIGEST>
