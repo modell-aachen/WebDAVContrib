@@ -213,7 +213,7 @@ sub _doAuth {
     my $authPath = $auth->{path} . '_files/' . $auth->{file};
     $authPath = Encode::decode_utf8( $authPath );
 
-    return 0 unless $path =~ m/$authPath/;
+    return 0 if ( index( $path, $authPath ) == -1 );
     return $auth;
 }
 
