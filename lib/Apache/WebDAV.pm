@@ -795,7 +795,7 @@ sub PROPFIND {
 
     my $authRequired = 1;
     my $loc = $this->{location};
-    $authRequired = 0 if ( $uri =~ m/\/$/ || $uri =~ m/^$loc$/ );
+    $authRequired = 0 if ( $uri =~ m/\/$/ || $uri =~ m/_files$/ || $uri =~ m/^$loc$/ );
 
     if ( $authRequired ) {
         my @parts = grep( !/^$/, split('/', $loc) );
