@@ -211,7 +211,7 @@ sub _doAuth {
     return 0 unless $this->_processAuth($request, $auth->{user});
 
     my $authPath = $auth->{path} . '_files/' . $auth->{file};
-    $authPath = Encode::decode_utf8( $authPath );
+    $authPath = Encode::decode_utf8( $authPath ) unless $Foswiki::UNICODE;
 
     return 0 if ( index( $path, $authPath ) == -1 );
     return $auth;
