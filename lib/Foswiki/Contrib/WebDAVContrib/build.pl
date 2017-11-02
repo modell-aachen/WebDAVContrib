@@ -1,4 +1,7 @@
 #!/usr/bin/perl
+
+BEGIN { unshift @INC, split( /:/, $ENV{FOSWIKI_LIBS} ); }
+
 use Foswiki::Contrib::Build;
 
 # Create the build object
