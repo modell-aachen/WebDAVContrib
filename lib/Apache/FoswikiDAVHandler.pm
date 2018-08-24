@@ -10,6 +10,7 @@ use Apache2::Module     ();
 use Apache2::RequestRec ();
 
 use Apache::WebDAV;
+use Foswiki();
 our $VERSION = '$Rev: 1.0.3 $';
 our $RELEASE = '%$RELEASE%';
 
